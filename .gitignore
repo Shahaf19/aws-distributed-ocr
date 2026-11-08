@@ -1,0 +1,40 @@
+# Maven build output
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+dependency-reduced-pom.xml
+.mvn/wrapper/maven-wrapper.jar
+
+# Compiled / packaged files
+*.class
+*.jar
+*.war
+*.log
+
+# IDEs
+.vscode/
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AWS credentials and secrets - never commit these
+.aws/
+credentials
+*.pem
+*.key
+.env
+
+# Local test input/output
+*.tmp
+
+# Course material (not for a public repo)
+Assignment*.pdf
