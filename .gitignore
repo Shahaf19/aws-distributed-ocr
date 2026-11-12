@@ -38,3 +38,6 @@ credentials
 
 # Course material (not for a public repo)
 Assignment*.pdf
+
+# Personal notes (local only)
+DECISIONS.md
