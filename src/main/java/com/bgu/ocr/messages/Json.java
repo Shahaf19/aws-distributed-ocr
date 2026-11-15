@@ -12,6 +12,7 @@ public final class Json {
     static final ObjectMapper MAPPER = new ObjectMapper()
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)          // omit text/error when null
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) // tolerate fields added later
+            .configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, true)
             .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);       // Terminate has no fields
 
     private Json() {
@@ -28,8 +29,13 @@ public final class Json {
     /** @throws MalformedMessageException if the body is not valid JSON for {@code type} */
     public static <T> T fromJson(String body, Class<T> type) {
         try {
-            return MAPPER.readValue(body, type);
-        } catch (JsonProcessingException e) {   // includes constructor validation failures, wrapped by Jackson
+            T parsed = MAPPER.readValue(body, type);
+            if (parsed == null) {
+                throw new MalformedMessageException("Cannot parse " + type.getSimpleName() + ": null",
+                        new IllegalArgumentException("message must not be null"));
+            }
+            return parsed;
+        } catch (JsonProcessingException e) {
             throw new MalformedMessageException("Cannot parse " + type.getSimpleName() + ": " + body, e);
         }
     }
