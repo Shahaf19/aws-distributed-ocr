@@ -36,6 +36,9 @@ credentials
 # Local test input/output
 *.tmp
 
+# Tesseract language data (downloaded: tessdata_fast/eng.traineddata)
+tessdata/
+
 # Course material (not for a public repo)
 Assignment*.pdf
 
