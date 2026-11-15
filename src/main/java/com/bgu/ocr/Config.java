@@ -5,8 +5,11 @@ public final class Config {
 
     public static final String REGION = "us-east-1";
 
-    /** Must be globally unique across all of S3; finalized at the first real AWS run. */
-    public static final String BUCKET = "bgu-dsp-ocr-change-me";
+    /**
+     * Must be unique across all of S3, so it lives in one AWS account (the one used for real runs).
+     * Everything we store is under it, so it's easy to remove.
+     */
+    public static final String BUCKET = "dsp-ocr-a1";
 
     /** The shared inbox all Managers pull from. */
     public static final String INBOX_QUEUE = "ocr-manager-inbox";
