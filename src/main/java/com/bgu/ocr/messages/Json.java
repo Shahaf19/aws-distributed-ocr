@@ -29,8 +29,13 @@ public final class Json {
     /** @throws MalformedMessageException if the body is not valid JSON for {@code type} */
     public static <T> T fromJson(String body, Class<T> type) {
         try {
-            return MAPPER.readValue(body, type);
-        } catch (JsonProcessingException e) {   // includes constructor validation failures, wrapped by Jackson
+            T parsed = MAPPER.readValue(body, type);
+            if (parsed == null) {
+                throw new MalformedMessageException("Cannot parse " + type.getSimpleName() + ": null",
+                        new IllegalArgumentException("message must not be null"));
+            }
+            return parsed;
+        } catch (JsonProcessingException e) {
             throw new MalformedMessageException("Cannot parse " + type.getSimpleName() + ": " + body, e);
         }
     }
