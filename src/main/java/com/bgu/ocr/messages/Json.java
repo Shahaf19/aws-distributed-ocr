@@ -12,6 +12,7 @@ public final class Json {
     static final ObjectMapper MAPPER = new ObjectMapper()
             .setSerializationInclusion(JsonInclude.Include.NON_NULL)          // omit text/error when null
             .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false) // tolerate fields added later
+            .configure(DeserializationFeature.FAIL_ON_TRAILING_TOKENS, true)
             .configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);       // Terminate has no fields
 
     private Json() {
