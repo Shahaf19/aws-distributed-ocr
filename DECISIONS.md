@@ -51,8 +51,9 @@ Where the spec states something, we follow it; these are the points where the sp
     entry in the jobs table, submits `StartJob`. Also notices terminate.
   - **Results loop** (1 thread): pulls `OcrResult`s, fills `results[index]` (duplicates ignored), and when a job
     reaches K results, submits `FinishJob`.
-  - **Start pool:** `StartJob` = download input, count K, launch Workers (before sending, so boot overlaps sending),
-    send ImageTasks in batches of 10.
+  - **Start pool:** `StartJob` = download input, count K, send ImageTasks in batches of 10, then launch Workers.
+    This is the spec's order ("creates an SQS message for each URL … checks the SQS message count and starts
+    Workers"). Launching first would only save the few seconds of sending.
   - **Finish pool:** `FinishJob` = build summary, upload to S3, send `JobDone`, remove the job from the table.
   - Shared state: the jobs table (`ConcurrentHashMap`). **Scaling is one synchronized method**, so two concurrent
     `StartJob`s can't both launch Workers and exceed what's needed or the 19-instance cap.
@@ -108,10 +109,36 @@ Where the spec states something, we follow it; these are the points where the sp
 - **AWS cost impact:** one ChangeMessageVisibility per in-flight job every few minutes, plus free EC2 checks
   from the Local App. OCR is redone only after a crash.
 
+## Idle timeouts: idle Workers, then the idle Manager, shut down
+- **Decision:** the spec fixes scale-up (`m − k`, ≤ 19 instances) and shutdown on terminate, but says nothing about
+  instances that sit idle when no client sends terminate.
+- **Options and tradeoffs:**
+  - A: keep everything until terminate. The next job starts instantly, but idle instances may bill for hours.
+  - B: the Manager terminates its Workers after X minutes with no active jobs, and terminates itself after ~10 minutes
+    with no jobs. Deciding is local (the jobs table is empty), and only the Manager kills Workers, so its count `k` stays right.
+    The next job waits 1–3 minutes for new instances to boot.
+  - C: Workers shut themselves down when their queue stays empty. Race: the Manager counts them as active, launches
+    fewer than needed, and then they disappear. It would also be logic in the Worker.
+- **Choice and reason:** B. Pay only while there's work, with all scaling decisions in one place.
+  A Manager shutting down while idle loses nothing: a `NewTask` that arrives in the meantime stays in the shared inbox,
+  and the waiting Local App's periodic "ensure an available Manager exists" starts a new one.
+- **AWS cost impact:** saves idle instance-hours, which is the main cost. EC2 API calls (Describe/Run/Terminate)
+  are not billed.
+- **Implementation:** later, together with scaling.
+
 ## Open
-- Worker failure handling: visibility timeout vs heartbeat; poison messages.
-- Scaling policy, including scaling down idle Workers.
-- Idle Manager: keep running until terminate, or shut itself down after an idle timeout.
+- Worker failure handling: visibility timeout vs heartbeat; poison messages (Worker sends an error `OcrResult` after
+  N receives; agree with partner).
+- Scaling down while smaller jobs are still running.
+- Fairness between jobs on one task queue (head-of-line blocking): interleaved sending in `StartJob` (Manager-only,
+  no contract change). Per-job task queues are out: the spec says "all worker nodes take their messages from the
+  same SQS queue".
+
+## Settled by the spec (no choice left)
+- **Two Managers scaling at the same moment** could together exceed 19 instances (the synchronized scaling method
+  only locks within one Manager). The spec says "you may assume there will not be any race conditions" (e.g. two Local
+  Apps starting a Manager at once), so there's no cross-Manager lock. A `RunInstances` failure is treated as "cap reached".
+- Orphan Workers and queues of a dead Manager.
 - Bootstrapping: custom AMI vs user-data; instance type.
 
 <!-- Template
