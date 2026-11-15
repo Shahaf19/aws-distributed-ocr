@@ -20,7 +20,12 @@ public final class Summary {
 
     public static List<OcrResult> fromJson(String body) {
         try {
-            return Json.MAPPER.readValue(body, RESULT_LIST);
+            List<OcrResult> parsed = Json.MAPPER.readValue(body, RESULT_LIST);
+            if (parsed == null || parsed.stream().anyMatch(result -> result == null)) {
+                throw new MalformedMessageException("Cannot parse summary",
+                        new IllegalArgumentException("summary must contain OcrResult objects"));
+            }
+            return parsed;
         } catch (JsonProcessingException e) {
             throw new MalformedMessageException("Cannot parse summary", e);
         }
