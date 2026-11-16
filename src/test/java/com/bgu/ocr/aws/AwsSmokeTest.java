@@ -32,8 +32,8 @@ public class AwsSmokeTest {
 
     @Test
     public void sqsSendReceiveDelete() throws InterruptedException {
-        QueueAdmin admin = QueueAdmin.withDefaultClient();
-        SqsQueue queue = admin.create("ocr-smoke-" + UUID.randomUUID(), 60);   // exercises the visibility attribute
+        QueueAdmin admin = SqsQueueAdmin.withDefaultClient();
+        MessageQueue queue = admin.create("ocr-smoke-" + UUID.randomUUID(), 60);   // exercises the visibility attribute
         try {
             Thread.sleep(1000);   // AWS advises a short wait before using a newly created queue
 
