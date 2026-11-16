@@ -32,8 +32,9 @@ scaling, cost). Do not log tooling, process or team choices.
 ## Team split (2 partners)
 - **Shahaf:** Manager (concurrent clients, per-client aggregation, termination), scaling
   (launching workers, ≤19 instances), AWS infra helpers, including `Ec2Helper.ensureManagerRunning()`
-  (EC2 tag lookup + RunInstances), which the Local App calls.
-- **Partner:** Worker end to end (image download, Tess4J OCR, SQS loop, visibility timeout, error messages,
+  (EC2 tag lookup + RunInstances), which the Local App calls. Also the **OCR service** (Tess4J: image → text,
+  verified locally first, as the spec's "Getting Started" asks); the Worker calls it.
+- **Partner:** Worker end to end (image download, SQS loop, visibility timeout, error messages,
   crash recovery) and Local App (S3 upload, SQS new-task/done flow, download summary, HTML output, terminate).
 - **Together:** the message formats (agree before coding), EC2 bootstrapping (AMI / user-data / IAM / Tesseract on Linux)
   at the end, and the README. Do an **early skeleton run on EC2** (one instance runs the jar via user-data)
