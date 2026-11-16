@@ -101,8 +101,15 @@ Where the spec states something, we follow it; these are the points where the sp
 - **Choice and reason:** C. Recovery is automatic through SQS, it builds on the shared inbox, and the jobs table stays a simple map.
 - **Details:**
   - Manager: `NewTask` is deleted in `FinishJob`, after `JobDone` is sent. The heartbeat is one
-    `ScheduledExecutorService` thread that extends visibility for all in-flight jobs every few minutes.
+    `ScheduledExecutorService` thread that extends visibility for all in-flight jobs.
     SQS limit: visibility can be extended up to 12 h after the first receive, far longer than any job.
+  - Numbers: the inbox queue is created with a **180 s** visibility timeout (not the 30 s default, which would let
+    the `NewTask` reappear before the first beat and start the job twice). Every **60 s** the heartbeat resets each
+    job's deadline to now + 180 s. Recovery after a crash takes ≤ 3 min. A fixed beat was chosen over a growing one
+    (fewer calls, slower recovery) and a progress-based one (also catches a stuck Manager, but falsely abandons jobs
+    while Workers boot). Calls are negligible either way.
+  - Limit: the heartbeat detects a **dead** Manager (silence), not a **stuck** one whose heartbeat thread still runs.
+    Mitigation: timeouts on every network call. To be explained in the README.
   - Local App (partner): while waiting, re-run "ensure an available Manager exists" every ~1 min, in case the dead
     Manager was the only one. If two `JobDone`s arrive (from a stalled Manager), use the first and ignore the second.
   - Not covered here: the dead Manager's Workers and queues (see the idle Workers question in Open).
@@ -126,20 +133,42 @@ Where the spec states something, we follow it; these are the points where the sp
   are not billed.
 - **Implementation:** later, together with scaling.
 
+## Worker failures: fixed visibility timeout + receive-count limit for poison images
+- **Decision:** how an `ImageTask` survives a Worker that crashes or stalls ("some other worker should be able to
+  handle that message"), and how an image that breaks *every* Worker (a poison message) is stopped from circling forever.
+- **Options and tradeoffs:**
+  - Visibility of an `ImageTask`:
+    - A: a heartbeat in the Worker. Fits work of unknown length, but more code and calls, and a stuck Worker
+      whose heartbeat still runs holds the image forever.
+    - B: a fixed timeout safely above the worst case for one image (download + OCR take seconds). No extra code or calls.
+      A crashed *or* stalled Worker simply stops holding the image when the timeout expires.
+  - Poison images:
+    - A: an SQS dead-letter queue (redrive policy, `maxReceiveCount`). SQS moves the message after N receives
+      automatically, but then no `OcrResult` is ever sent, and the job never completes unless the Manager also
+      watches the DLQ: one more queue and one more poller.
+    - B: the Worker checks `ApproximateReceiveCount` (returned free with each receive). Above the limit it skips OCR,
+      sends an error `OcrResult` ("failed after N attempts") and deletes the task. The job completes, and the spec's
+      error line appears in the output.
+- **Choice and reason:** B + B. Simplest, no extra queues, and every image always ends in exactly one result.
+  A late result from a stalled Worker that wakes up is a duplicate the Manager ignores (by `index`).
+  Images that merely *fail* (404, timeout, unreadable) need no counting: the exception becomes an error result at once.
+- **Numbers:** the task queue is created by the Manager with a **120 s** visibility timeout. The limit is **3 receives**.
+  Downloads need an explicit timeout so a stuck download can't outlast the visibility.
+- **AWS cost impact:** no extra calls (the receive count comes with the receive). A crashed or poison image is
+  processed at most 3 times.
+
 ## Open
-- Worker failure handling: visibility timeout vs heartbeat; poison messages (Worker sends an error `OcrResult` after
-  N receives; agree with partner).
 - Scaling down while smaller jobs are still running.
 - Fairness between jobs on one task queue (head-of-line blocking): interleaved sending in `StartJob` (Manager-only,
   no contract change). Per-job task queues are out: the spec says "all worker nodes take their messages from the
   same SQS queue".
+- Orphan Workers and queues of a dead Manager.
+- Bootstrapping: custom AMI vs user-data; instance type.
 
 ## Settled by the spec (no choice left)
 - **Two Managers scaling at the same moment** could together exceed 19 instances (the synchronized scaling method
   only locks within one Manager). The spec says "you may assume there will not be any race conditions" (e.g. two Local
   Apps starting a Manager at once), so there's no cross-Manager lock. A `RunInstances` failure is treated as "cap reached".
-- Orphan Workers and queues of a dead Manager.
-- Bootstrapping: custom AMI vs user-data; instance type.
 
 <!-- Template
 ## <title>

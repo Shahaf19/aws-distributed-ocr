@@ -17,6 +17,16 @@ public final class Config {
     /** SQS maximum: an empty receive costs one call per 20 s instead of a busy loop. */
     public static final int LONG_POLL_SECONDS = 20;
 
+    /** A NewTask stays hidden while its job runs; the Manager's heartbeat resets it to this every beat. */
+    public static final int INBOX_VISIBILITY_SECONDS = 180;
+    public static final int INBOX_HEARTBEAT_SECONDS = 60;
+
+    /** Safely above the worst case for one image (download + OCR), so no Worker heartbeat is needed. */
+    public static final int TASK_VISIBILITY_SECONDS = 120;
+
+    /** After this many deliveries an ImageTask is a poison message: the Worker reports an error instead of retrying. */
+    public static final int MAX_TASK_ATTEMPTS = 3;
+
     private Config() {
     }
 }
