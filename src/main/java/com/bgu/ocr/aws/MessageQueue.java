@@ -5,6 +5,9 @@ import java.util.List;
 /** A queue of text messages with SQS semantics: at-least-once delivery, no ordering, receive hides until delete. */
 public interface MessageQueue {
 
+    /** Address other components use to reach this queue (e.g. the reply queue URL inside a NewTask). */
+    String url();
+
     void send(String body);
 
     /** Sends many messages; implementations batch them to save API calls. */

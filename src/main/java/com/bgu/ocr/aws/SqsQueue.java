@@ -26,6 +26,7 @@ public final class SqsQueue implements MessageQueue {
         this.url = url;
     }
 
+    @Override
     public String url() {
         return url;
     }
