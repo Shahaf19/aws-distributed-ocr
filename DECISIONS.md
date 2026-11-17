@@ -157,6 +157,18 @@ Where the spec states something, we follow it; these are the points where the sp
 - **AWS cost impact:** no extra calls (the receive count comes with the receive). A crashed or poison image is
   processed at most 3 times.
 
+## Workers take one task per receive
+- **Decision:** how many `ImageTask`s a Worker takes per receive (SQS allows 1–10).
+- **Options and tradeoffs:**
+  - A: 1 per receive. A free Worker always gets the next image, so work spreads evenly, and the 120 s visibility
+    covers exactly one image.
+  - B: up to 10 per receive. 10× fewer receive calls, but one Worker holds 10 images while others may sit idle
+    (the spec: "Are all your workers working hard? Or some are slacking?"), and all 10 share one visibility clock,
+    so the last ones can time out while waiting and be processed twice.
+- **Choice and reason:** A. Even load and an accurate per-image timeout, for a negligible cost.
+- **AWS cost impact:** one receive per image instead of one per 10: 1,000 images = 1,000 vs 100 calls,
+  about $0.0004 apart.
+
 ## Open
 - Scaling down while smaller jobs are still running.
 - Fairness between jobs on one task queue (head-of-line blocking): interleaved sending in `StartJob` (Manager-only,
