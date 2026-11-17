@@ -27,6 +27,9 @@ public final class Config {
     /** After this many deliveries an ImageTask is a poison message: the Worker reports an error instead of retrying. */
     public static final int MAX_TASK_ATTEMPTS = 3;
 
+    /** After this many deliveries of a NewTask whose start keeps failing, the Manager rejects it to the client. */
+    public static final int MAX_START_ATTEMPTS = 3;
+
     private Config() {
     }
 }

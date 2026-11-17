@@ -1,7 +1,6 @@
 package com.bgu.ocr.aws;
 
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /** Test fake for S3: a thread-safe map from key to text. */
@@ -18,7 +17,7 @@ public final class InMemoryObjectStore implements ObjectStore {
     public String get(String key) {
         String text = objects.get(key);
         if (text == null) {
-            throw new NoSuchElementException("no object " + key);
+            throw new ObjectMissingException(key, null);
         }
         return text;
     }
