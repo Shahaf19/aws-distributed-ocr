@@ -1,5 +1,6 @@
 package com.bgu.ocr.manager;
 
+import com.bgu.ocr.aws.ReceivedMessage;
 import com.bgu.ocr.messages.NewTask;
 import com.bgu.ocr.messages.OcrResult;
 
@@ -18,18 +19,18 @@ import java.util.Objects;
 public final class JobState {
 
     private final NewTask task;
-    private final String inboxReceiptHandle;
+    private volatile ReceivedMessage inboxMessage;   // volatile: replaced by the inbox loop, read by the heartbeat
 
     private OcrResult[] results;   // null until the number of URLs is known
     private int received;
 
     /**
-     * @param inboxReceiptHandle handle of the NewTask message; used for the visibility heartbeat and to delete
-     *                           the message once the job is finished (crash recovery, see DECISIONS.md)
+     * @param inboxMessage the delivery of the NewTask; its receipt handle is used for the visibility heartbeat and to
+     *                     delete the message once the job is finished (crash recovery, see DECISIONS.md)
      */
-    public JobState(NewTask task, String inboxReceiptHandle) {
+    public JobState(NewTask task, ReceivedMessage inboxMessage) {
         this.task = Objects.requireNonNull(task, "task");
-        this.inboxReceiptHandle = Objects.requireNonNull(inboxReceiptHandle, "inboxReceiptHandle");
+        this.inboxMessage = Objects.requireNonNull(inboxMessage, "inboxMessage");
     }
 
     public NewTask task() {
@@ -40,8 +41,16 @@ public final class JobState {
         return task.jobId();
     }
 
-    public String inboxReceiptHandle() {
-        return inboxReceiptHandle;
+    public ReceivedMessage inboxMessage() {
+        return inboxMessage;
+    }
+
+    /**
+     * SQS redelivered this job's NewTask (we stalled past its visibility). Only the newest delivery's receipt handle
+     * works for extending and deleting, so the job switches to it.
+     */
+    public void updateInboxMessage(ReceivedMessage newerDelivery) {
+        this.inboxMessage = Objects.requireNonNull(newerDelivery, "newerDelivery");
     }
 
     /**

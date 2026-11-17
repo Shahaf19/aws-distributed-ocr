@@ -6,6 +6,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageBatchRequestEntry;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
+import software.amazon.awssdk.services.sqs.model.QueueDoesNotExistException;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchRequestEntry;
 import software.amazon.awssdk.services.sqs.model.SendMessageBatchResponse;
 
@@ -31,9 +32,14 @@ public final class SqsQueue implements MessageQueue {
         return url;
     }
 
+    /** @throws QueueGoneException if the queue was deleted */
     @Override
     public void send(String body) {
-        sqs.sendMessage(b -> b.queueUrl(url).messageBody(body));
+        try {
+            sqs.sendMessage(b -> b.queueUrl(url).messageBody(body));
+        } catch (QueueDoesNotExistException e) {
+            throw new QueueGoneException(url, e);
+        }
     }
 
     @Override
@@ -53,9 +59,12 @@ public final class SqsQueue implements MessageQueue {
     }
 
     @Override
-    public List<ReceivedMessage> receive() {
+    public List<ReceivedMessage> receive(int maxMessages) {
+        if (maxMessages < 1 || maxMessages > MAX_RECEIVE) {
+            throw new IllegalArgumentException("maxMessages must be 1-" + MAX_RECEIVE + ": " + maxMessages);
+        }
         return sqs.receiveMessage(b -> b.queueUrl(url)
-                        .maxNumberOfMessages(MAX_BATCH)
+                        .maxNumberOfMessages(maxMessages)
                         .waitTimeSeconds(Config.LONG_POLL_SECONDS)
                         .messageSystemAttributeNames(MessageSystemAttributeName.SENT_TIMESTAMP,
                                 MessageSystemAttributeName.APPROXIMATE_RECEIVE_COUNT))

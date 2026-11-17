@@ -8,7 +8,9 @@ import java.util.List;
 
 import org.junit.Test;
 
+import com.bgu.ocr.aws.ReceivedMessage;
 import com.bgu.ocr.messages.ImageTask;
+import com.bgu.ocr.messages.Json;
 import com.bgu.ocr.messages.NewTask;
 import com.bgu.ocr.messages.OcrResult;
 
@@ -17,7 +19,8 @@ public class JobStateTest {
     private static final String JOB = "job-1";
 
     private static JobState newJob() {
-        return new JobState(new NewTask(JOB, "jobs/job-1/input.txt", "https://sqs/done", 5), "receipt-1");
+        NewTask task = new NewTask(JOB, "jobs/job-1/input.txt", "https://sqs/done", 5);
+        return new JobState(task, new ReceivedMessage(Json.toJson(task), "receipt-1", 0, 1));
     }
 
     private static OcrResult ok(int index) {

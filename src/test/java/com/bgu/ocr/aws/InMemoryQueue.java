@@ -15,8 +15,6 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class InMemoryQueue implements MessageQueue {
 
-    private static final int MAX_RECEIVE = 10;
-
     private record Stored(String body, long sentTimestamp, int receiveCount) {
     }
 
@@ -45,8 +43,18 @@ public final class InMemoryQueue implements MessageQueue {
         return url;
     }
 
+    private volatile boolean deleted;
+
+    /** Called by {@link InMemoryQueueAdmin#delete}: later sends fail like they do on a deleted SQS queue. */
+    void markDeleted() {
+        deleted = true;
+    }
+
     @Override
     public void send(String body) {
+        if (deleted) {
+            throw new QueueGoneException(url, null);
+        }
         visible.add(new Stored(body, System.currentTimeMillis(), 0));
     }
 
@@ -56,7 +64,10 @@ public final class InMemoryQueue implements MessageQueue {
     }
 
     @Override
-    public List<ReceivedMessage> receive() {
+    public List<ReceivedMessage> receive(int maxMessages) {
+        if (maxMessages < 1 || maxMessages > MAX_RECEIVE) {
+            throw new IllegalArgumentException("maxMessages must be 1-" + MAX_RECEIVE + ": " + maxMessages);
+        }
         List<Stored> taken = new ArrayList<>();
         try {
             Stored first = visible.poll(waitMillis, TimeUnit.MILLISECONDS);
@@ -68,7 +79,7 @@ public final class InMemoryQueue implements MessageQueue {
             Thread.currentThread().interrupt();
             return List.of();
         }
-        visible.drainTo(taken, MAX_RECEIVE - 1);
+        visible.drainTo(taken, maxMessages - 1);
         return taken.stream().map(this::deliver).toList();
     }
 
@@ -89,12 +100,24 @@ public final class InMemoryQueue implements MessageQueue {
         messages.forEach(this::delete);
     }
 
+    private final List<Integer> extensions = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Like SQS, fails for a handle that is not (or no longer) in flight, e.g. already deleted or stale. */
     @Override
     public void extendVisibility(ReceivedMessage message, int seconds) {
+        if (!inFlight.containsKey(message.receiptHandle())) {
+            throw new IllegalStateException("message not in flight: " + message.receiptHandle());
+        }
         if (seconds == 0) {
             makeVisible(message.receiptHandle());
         }
         // seconds > 0: nothing to do, time never runs out in the fake
+        extensions.add(seconds);
+    }
+
+    /** The {@code seconds} of every successful {@link #extendVisibility} call, in order. */
+    public List<Integer> extensions() {
+        return extensions;
     }
 
     /** Simulates every visibility timeout running out, e.g. after the receiver crashed. */

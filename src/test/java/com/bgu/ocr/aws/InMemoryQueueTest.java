@@ -53,4 +53,12 @@ public class InMemoryQueueTest {
         assertEquals(10, queue.receive().size());
         assertEquals(5, queue.receive().size());
     }
+
+    @Test
+    public void receiveTakesNoMoreThanAsked() {
+        queue.sendAll(Collections.nCopies(5, "x"));
+
+        assertEquals(2, queue.receive(2).size());
+        assertEquals(3, queue.visibleCount());   // the rest stay available to others
+    }
 }

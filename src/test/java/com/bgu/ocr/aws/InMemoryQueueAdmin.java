@@ -1,7 +1,6 @@
 package com.bgu.ocr.aws;
 
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -32,18 +31,24 @@ public final class InMemoryQueueAdmin implements QueueAdmin {
         return create(name);
     }
 
+    /** Like SQS, opening never fails; using a queue that doesn't exist does (QueueGoneException on send). */
     @Override
     public InMemoryQueue open(String url) {
         InMemoryQueue queue = queues.get(url);
         if (queue == null) {
-            throw new NoSuchElementException("no queue " + url);
+            InMemoryQueue gone = new InMemoryQueue(url, waitMillis);
+            gone.markDeleted();
+            return gone;
         }
         return queue;
     }
 
     @Override
     public void delete(MessageQueue queue) {
-        queues.remove(queue.url());
+        InMemoryQueue removed = queues.remove(queue.url());
+        if (removed != null) {
+            removed.markDeleted();
+        }
     }
 
     public boolean exists(String name) {
