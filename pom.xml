@@ -16,7 +16,8 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <maven.compiler.release>17</maven.compiler.release>
     <aws.sdk.version>2.57.0</aws.sdk.version>
-    <main.class>com.bgu.ocr.App</main.class>
+    <!-- java -jar runs the Local App (spec); Manager and Worker are started with java -cp on EC2 -->
+    <main.class>com.bgu.ocr.localapp.LocalApp</main.class>
   </properties>
 
   <dependencies>

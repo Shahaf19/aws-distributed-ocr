@@ -23,6 +23,7 @@ public final class InMemoryQueue implements MessageQueue {
     private final BlockingDeque<Stored> visible = new LinkedBlockingDeque<>();
     private final Map<String, Stored> inFlight = new ConcurrentHashMap<>();
     private final AtomicLong handles = new AtomicLong();
+    private final String url;
     private final long waitMillis;
 
     /** Short wait instead of 20 s, so loops under test stay fast. */
@@ -31,7 +32,17 @@ public final class InMemoryQueue implements MessageQueue {
     }
 
     public InMemoryQueue(long waitMillis) {
+        this("memory://queue", waitMillis);
+    }
+
+    public InMemoryQueue(String url, long waitMillis) {
+        this.url = url;
         this.waitMillis = waitMillis;
+    }
+
+    @Override
+    public String url() {
+        return url;
     }
 
     @Override
