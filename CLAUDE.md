@@ -39,7 +39,9 @@ One Maven module and one shaded jar, with entry points `LocalApp`, `Manager` and
 | Manager startup | Local App | `Ec2Helper.ensureManagerRunning()` (EC2 tags; re-run every ~1 min while waiting) |
 | Names, bucket, timeouts | all | constants in `Config` |
 
-`index` = the URL's line number in the input file. The Manager uses it to ignore SQS duplicates and to know when a
+`index` = the URL's position among the input file's non-blank lines, dense 0…K−1 (it sizes and fills the job's
+result array; blank lines must not leave gaps, or the job never completes). The Manager uses it to ignore SQS
+duplicates, to keep input order, and to know when a
 job is complete. Workers send the result **before** deleting the task. The Local App uses the first `JobDone` if two
 arrive. Rationale for all of this is in `DECISIONS.md`.
 
@@ -51,17 +53,17 @@ canned summary. Real AWS is exercised by `AwsSmokeTest` (opt-in: `-Dsmoke=true`)
 
 ## Status and next steps
 Follows the spec's "Getting Started" order.
-- **Done:** Maven project; message contract; AWS wrappers (verified against real SQS/S3); OCR service (verified
-  locally, the spec's first coding step); `JobState` (per-job result tracking).
+- **Done** (all verified locally on the in-memory fakes; `SystemTest` runs Local App + Manager + fake Worker):
+  message contract; AWS wrappers (verified against real SQS/S3); OCR service; Local App; Manager core (inbox and
+  results loops, Start/Finish pools, heartbeat, crash recovery, retry vs reject of unstartable jobs); Worker
+  (download with timeouts, OCR, error results, poison-task limit, one task per receive).
+- **Not yet:** `ManagerStarter` (Local App) and `WorkerScaler` (Manager) are stubs; the terminate flow and idle
+  timeouts are not implemented.
 - **Next, in spec order:**
-  1. Local App: S3 upload, `NewTask`, wait for `JobDone`, download the summary, HTML output, terminate.
-     Verified against a fake Manager.
-  2. Manager: inbox loop, `StartJob`, results loop, `FinishJob`, heartbeat. Verified locally with a fake Worker.
-  3. Worker: receive → download → OCR → result → delete, with the receive-count limit.
-  4. All three together on the local machine (real SQS/S3).
-  5. On EC2: `Ec2Helper` (manager lookup, scaling `m − k` ≤ 19), bootstrapping (user-data/AMI, Tesseract on Linux),
-     terminate flow. Do an early skeleton EC2 run (one instance running the jar) to surface Academy/IAM/Tesseract
-     problems well before the deadline.
+  1. All three together on the local machine with real SQS/S3 (needs a lab session).
+  2. On EC2: `Ec2Helper` (manager lookup and launch, scaling `m − k` ≤ 19), bootstrapping (user-data/AMI,
+     Tesseract on Linux), terminate flow, idle timeouts. Start with a skeleton EC2 run (one instance running the
+     jar) to surface Academy/IAM/Tesseract problems well before the deadline.
 - **Open decisions:** see "Open" in `DECISIONS.md`.
 
 ## Local environment notes

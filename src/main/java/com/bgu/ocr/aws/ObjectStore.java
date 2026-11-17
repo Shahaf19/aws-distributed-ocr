@@ -5,6 +5,6 @@ public interface ObjectStore {
 
     void put(String key, String text);
 
-    /** @throws RuntimeException if no object has that key */
+    /** @throws ObjectMissingException if no object has that key */
     String get(String key);
 }

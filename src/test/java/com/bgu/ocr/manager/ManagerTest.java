@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Test;
@@ -15,6 +16,7 @@ import com.bgu.ocr.Config;
 import com.bgu.ocr.aws.InMemoryObjectStore;
 import com.bgu.ocr.aws.InMemoryQueue;
 import com.bgu.ocr.aws.InMemoryQueueAdmin;
+import com.bgu.ocr.aws.ObjectStore;
 import com.bgu.ocr.aws.ReceivedMessage;
 import com.bgu.ocr.messages.JobDone;
 import com.bgu.ocr.messages.Json;
@@ -33,7 +35,11 @@ public class ManagerTest {
     private final List<FakeWorker> workers = new ArrayList<>();
 
     private Manager startManager(String id) {
-        Manager manager = new Manager(queues, store, scalerRequests::add, id, 2);
+        return startManager(id, store);
+    }
+
+    private Manager startManager(String id, ObjectStore withStore) {
+        Manager manager = new Manager(queues, withStore, scalerRequests::add, id, 2);
         manager.start();
         managers.add(manager);
         return manager;
@@ -60,6 +66,36 @@ public class ManagerTest {
                 return Json.fromJson(got.get(0).body(), JobDone.class);
             }
         }
+    }
+
+    /** Like awaitDone, but lets "time pass": every in-flight inbox message's visibility keeps running out. */
+    private JobDone awaitDoneWhileTimePasses(InMemoryQueue reply) {
+        while (true) {
+            inbox.expireInFlight();
+            List<ReceivedMessage> got = reply.receive();
+            if (!got.isEmpty()) {
+                return Json.fromJson(got.get(0).body(), JobDone.class);
+            }
+        }
+    }
+
+    /** The real store, except that reading inputs fails {@code failures} times with a temporary-looking error. */
+    private ObjectStore flakyStore(int failures) {
+        AtomicInteger left = new AtomicInteger(failures);
+        return new ObjectStore() {
+            @Override
+            public void put(String key, String text) {
+                store.put(key, text);
+            }
+
+            @Override
+            public String get(String key) {
+                if (key.endsWith("input.txt") && left.getAndDecrement() > 0) {
+                    throw new IllegalStateException("S3 temporarily unavailable");
+                }
+                return store.get(key);
+            }
+        };
     }
 
     private List<OcrResult> summaryOf(JobDone done) {
@@ -131,5 +167,25 @@ public class ManagerTest {
 
         assertTrue(done.wasRejected());
         assertEquals("NewTask deleted: retrying can't help", 0, inbox.inFlightCount() + inbox.visibleCount());
+    }
+
+    @Test(timeout = 5000)
+    public void temporaryStartFailureIsRetriedNotRejected() {
+        startManager("m1", flakyStore(1));
+        startWorkerFor("m1");
+
+        JobDone done = awaitDoneWhileTimePasses(submit("job-1", "http://a.png", "http://b.png"));
+
+        assertEquals(2, summaryOf(done).size());
+    }
+
+    @Test(timeout = 5000)
+    public void startThatKeepsFailingIsRejectedAfterMaxAttempts() {
+        startManager("m1", flakyStore(Integer.MAX_VALUE));
+
+        JobDone done = awaitDoneWhileTimePasses(submit("job-1", "http://a.png"));
+
+        assertTrue(done.wasRejected());
+        assertTrue(done.rejected(), done.rejected().contains("after " + Config.MAX_START_ATTEMPTS + " attempts"));
     }
 }

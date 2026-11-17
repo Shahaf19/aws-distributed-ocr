@@ -2,6 +2,7 @@ package com.bgu.ocr.manager;
 
 import com.bgu.ocr.Config;
 import com.bgu.ocr.aws.MessageQueue;
+import com.bgu.ocr.aws.ObjectMissingException;
 import com.bgu.ocr.aws.ObjectStore;
 import com.bgu.ocr.aws.QueueAdmin;
 import com.bgu.ocr.aws.QueueGoneException;
@@ -41,7 +42,7 @@ public final class Manager {
     private Thread inboxThread;
     private Thread resultsThread;
 
-public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN) {
+    public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN) {
         if (managerClientsN <= 0) {
             throw new IllegalArgumentException("managerClientsN must be positive: " + managerClientsN);
         }
@@ -98,10 +99,26 @@ public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String
         startPool.submit(() -> {
             try {
                 new StartJob(job, store, taskQueue, scaler, this::finishJob).run();
+            } catch (ObjectMissingException e) {
+                reject(job, "input file not found: " + e.getMessage());   // permanent: retrying won't help
             } catch (RuntimeException e) {
-                reject(job, "cannot start job: " + e.getMessage());   // e.g. input missing: retrying won't help
+                retryLaterOrReject(job, e);
             }
         });
+    }
+
+    /**
+     * A failure that may be temporary (S3/SQS hiccup): drop the job but keep its NewTask, so it reappears within the
+     * inbox visibility timeout and is started again, like after a crash. Tasks already sent are absorbed by index
+     * deduplication. After {@code Config.MAX_START_ATTEMPTS} deliveries the client is told instead.
+     */
+    private void retryLaterOrReject(JobState job, RuntimeException cause) {
+        if (job.inboxMessage().receiveCount() >= Config.MAX_START_ATTEMPTS) {
+            reject(job, "cannot start job after " + Config.MAX_START_ATTEMPTS + " attempts: " + cause.getMessage());
+        } else {
+            System.err.println("Job " + job.jobId() + ": start failed, it will be retried: " + cause);
+            jobs.remove(job);   // stops its heartbeat; the NewTask stays in the inbox
+        }
     }
 
     /** Called (once per job) by the results thread, or by StartJob for an empty input. */

@@ -6,6 +6,7 @@ import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.NoSuchKeyException;
 
 import java.nio.charset.StandardCharsets;
 
@@ -40,8 +41,13 @@ public final class S3ObjectStore implements ObjectStore {
                 RequestBody.fromString(text, StandardCharsets.UTF_8));
     }
 
+    /** @throws ObjectMissingException if there is no object under {@code key} */
     @Override
     public String get(String key) {
-        return s3.getObjectAsBytes(b -> b.bucket(bucket).key(key)).asUtf8String();
+        try {
+            return s3.getObjectAsBytes(b -> b.bucket(bucket).key(key)).asUtf8String();
+        } catch (NoSuchKeyException e) {
+            throw new ObjectMissingException(key, e);
+        }
     }
 }
