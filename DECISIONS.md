@@ -13,7 +13,7 @@ Where the spec states something, we follow it; these are the points where the sp
     between Managers: wasted receives and extra delay.
   - C: one shared queue, not addressed. Each Manager pulls only while `activeClients` < `manager-clients-n`.
     Balances load automatically, and if a Manager dies another one takes its waiting jobs. Downside: there's no
-    channel to "the" Manager, which makes the terminate message ambiguous (see Open).
+    channel to "the" Manager, which makes the terminate message ambiguous (resolved in "Terminate shuts down all Managers").
 - **Choice and reason:** C. It's simplest and most robust, and it fits the spec ("sends a message to an SQS queue").
 - **AWS cost impact:** the same long-polling cost as per-Manager queues, with no CreateQueue/DeleteQueue calls.
 
@@ -110,7 +110,7 @@ Where the spec states something, we follow it; these are the points where the sp
     while Workers boot). Calls are negligible either way.
   - Limit: the heartbeat detects a **dead** Manager (silence), not a **stuck** one whose heartbeat thread still runs.
     Mitigation: timeouts on every network call. To be explained in the README.
-  - Local App (partner): while waiting, re-run "ensure an available Manager exists" every ~1 min, in case the dead
+  - Local App: while waiting, re-run "ensure an available Manager exists" every ~1 min, in case the dead
     Manager was the only one. If two `JobDone`s arrive (from a stalled Manager), use the first and ignore the second.
   - Not covered here: the dead Manager's Workers and queues (see the idle Workers question in Open).
 - **AWS cost impact:** one ChangeMessageVisibility per in-flight job every few minutes, plus free EC2 checks
@@ -125,7 +125,7 @@ Where the spec states something, we follow it; these are the points where the sp
     with no jobs. Deciding is local (the jobs table is empty), and only the Manager kills Workers, so its count `k` stays right.
     The next job waits 1–3 minutes for new instances to boot.
   - C: Workers shut themselves down when their queue stays empty. Race: the Manager counts them as active, launches
-    fewer than needed, and then they disappear. It would also be logic in the Worker.
+    fewer than needed, and then they disappear. It also spreads scaling logic into the Worker.
 - **Choice and reason:** B. Pay only while there's work, with all scaling decisions in one place.
   A Manager shutting down while idle loses nothing: a `NewTask` that arrives in the meantime stays in the shared inbox,
   and the waiting Local App's periodic "ensure an available Manager exists" starts a new one.
