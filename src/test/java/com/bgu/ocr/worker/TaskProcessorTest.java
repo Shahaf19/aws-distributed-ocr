@@ -59,6 +59,17 @@ public class TaskProcessorTest {
         assertEquals("no download on the 4th delivery", 0, fetches.get());
     }
 
+    @Test
+    public void anErrorConcernsOnlyThisImage() throws Exception {
+        TaskProcessor processor = new TaskProcessor(url -> {
+            throw new UnsatisfiedLinkError("no javajpeg in system library path");
+        }, ocr, 3);
+
+        OcrResult result = processor.process(TASK, 1);
+
+        assertEquals("UnsatisfiedLinkError: no javajpeg in system library path", result.error());
+    }
+
     @Test(expected = InterruptedException.class)
     public void shutdownGivesNoResult() throws Exception {
         new TaskProcessor(url -> {
@@ -70,5 +81,13 @@ public class TaskProcessorTest {
     public void descriptionIsTypeAndMessage() {
         assertEquals("IOException: HTTP 500", TaskProcessor.describe(new IOException("HTTP 500")));
         assertEquals("NullPointerException", TaskProcessor.describe(new NullPointerException()));
+    }
+
+    @Test
+    public void messagelessExceptionIsExplainedByItsCause() {
+        Exception unknownHost = new java.net.ConnectException();
+        unknownHost.initCause(new java.nio.channels.UnresolvedAddressException());
+
+        assertEquals("ConnectException (UnresolvedAddressException)", TaskProcessor.describe(unknownHost));
     }
 }

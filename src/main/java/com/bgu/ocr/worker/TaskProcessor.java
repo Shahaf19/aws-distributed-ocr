@@ -36,14 +36,23 @@ public final class TaskProcessor {
             return OcrResult.success(task, ocr.recognize(images.fetch(task.imageUrl())));
         } catch (InterruptedException e) {
             throw e;
-        } catch (Exception e) {
+        } catch (Exception | Error e) {
+            // Errors too (e.g. OutOfMemoryError on a huge image, a native decoder failing to load): they concern
+            // this one image, and must not kill the Worker, which would leave its instance billing and idle
             return OcrResult.failure(task, describe(e));
         }
     }
 
-    /** e.g. "IOException: HTTP 404", "UnknownHostException: example.invalid", "HttpTimeoutException: request timed out" */
-    static String describe(Exception e) {
+    /**
+     * e.g. "IOException: HTTP 404", "HttpTimeoutException: request timed out". An exception without a message is
+     * explained by its cause: "ConnectException (UnresolvedAddressException)" for a host that doesn't exist.
+     */
+    static String describe(Throwable e) {
         String type = e.getClass().getSimpleName();
-        return e.getMessage() == null ? type : type + ": " + e.getMessage();
+        if (e.getMessage() != null) {
+            return type + ": " + e.getMessage();
+        }
+        Throwable cause = e.getCause();
+        return cause == null || cause == e ? type : type + " (" + describe(cause) + ")";
     }
 }

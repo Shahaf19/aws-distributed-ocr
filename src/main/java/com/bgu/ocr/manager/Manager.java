@@ -15,7 +15,9 @@ import com.bgu.ocr.messages.Json;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Wires the Manager's parts (see DECISIONS.md, "Manager threading model"): an inbox thread and a results thread,
@@ -31,6 +33,7 @@ public final class Manager {
     private final WorkerScaler scaler;
     private final String managerId;
     private final int managerClientsN;
+    private final Runnable onFatal;
     private final JobTable jobs = new JobTable();
 
     private MessageQueue inbox;
@@ -43,6 +46,12 @@ public final class Manager {
     private Thread resultsThread;
 
     public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN) {
+        this(queues, store, scaler, managerId, managerClientsN, () -> System.exit(1));
+    }
+
+    /** @param onFatal what to do when a thread dies of something uncaught; tests pass a recorder instead of exiting */
+    Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN,
+            Runnable onFatal) {
         if (managerClientsN <= 0) {
             throw new IllegalArgumentException("managerClientsN must be positive: " + managerClientsN);
         }
@@ -51,6 +60,24 @@ public final class Manager {
         this.scaler = scaler;
         this.managerId = managerId;
         this.managerClientsN = managerClientsN;
+        this.onFatal = onFatal;
+    }
+
+    /**
+     * Fail fast: a Manager with a dead thread (say, its results loop) would keep running its heartbeat and hold its
+     * jobs hidden forever. Exiting instead stops the heartbeat, so the jobs reappear for another Manager.
+     */
+    private ThreadFactory threadsNamed(String name) {
+        AtomicInteger count = new AtomicInteger();
+        return work -> {
+            Thread thread = new Thread(work, name + "-" + count.incrementAndGet());
+            thread.setUncaughtExceptionHandler((dead, e) -> {
+                System.err.println("Manager: thread " + dead.getName() + " died, shutting down: " + e);
+                e.printStackTrace();
+                onFatal.run();
+            });
+            return thread;
+        };
     }
 
     /** This Manager's own queues: its Workers take tasks from one and put results in the other. */
@@ -67,19 +94,21 @@ public final class Manager {
         taskQueue = queues.create(taskQueueName(managerId), Config.TASK_VISIBILITY_SECONDS);
         MessageQueue resultsQueue = queues.create(resultsQueueName(managerId));
 
-        startPool = Executors.newFixedThreadPool(POOL_SIZE);
-        finishPool = Executors.newFixedThreadPool(POOL_SIZE);
+        startPool = Executors.newFixedThreadPool(POOL_SIZE, threadsNamed("start"));
+        finishPool = Executors.newFixedThreadPool(POOL_SIZE, threadsNamed("finish"));
         heartbeat = Executors.newSingleThreadScheduledExecutor();
         heartbeat.scheduleAtFixedRate(new Heartbeat(inbox, jobs, Config.INBOX_VISIBILITY_SECONDS),
                 Config.INBOX_HEARTBEAT_SECONDS, Config.INBOX_HEARTBEAT_SECONDS, TimeUnit.SECONDS);
 
         resultsLoop = new ResultsLoop(resultsQueue, jobs, this::finishJob);
-        resultsThread = new Thread(resultsLoop, "results-loop");
-        inboxThread = new Thread(new InboxLoop(inbox, jobs, managerClientsN, this::startJob, this::onTerminate),
-                "inbox-loop");
+        resultsThread = threadsNamed("results-loop").newThread(resultsLoop);
+        inboxThread = threadsNamed("inbox-loop").newThread(
+                new InboxLoop(inbox, jobs, managerClientsN, this::startJob, this::onTerminate));
         resultsThread.start();
         inboxThread.start();
         System.out.println("Manager " + managerId + " started (up to " + managerClientsN + " clients)");
+        System.out.println("  task queue:    " + taskQueue.url());
+        System.out.println("  results queue: " + resultsQueue.url());
     }
 
     /** Stops all threads. Nothing is deleted, so unfinished jobs are recovered from the inbox (like after a crash). */
@@ -96,7 +125,7 @@ public final class Manager {
 
     /** Called by the inbox thread for each accepted job. */
     private void startJob(JobState job) {
-        startPool.submit(() -> {
+        startPool.execute(() -> {   // execute, not submit: submit would hide an uncaught failure in an unread Future
             try {
                 new StartJob(job, store, taskQueue, scaler, this::finishJob).run();
             } catch (ObjectMissingException e) {
@@ -123,7 +152,7 @@ public final class Manager {
 
     /** Called (once per job) by the results thread, or by StartJob for an empty input. */
     private void finishJob(JobState job) {
-        finishPool.submit(new FinishJob(job, store, queues, inbox, jobs));
+        finishPool.execute(new FinishJob(job, store, queues, inbox, jobs));
     }
 
     /** Tells the client its job failed instead of leaving it waiting, then forgets the job for good. */
