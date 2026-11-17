@@ -41,7 +41,10 @@ public final class Manager {
     private Thread inboxThread;
     private Thread resultsThread;
 
-    public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN) {
+public Manager(QueueAdmin queues, ObjectStore store, WorkerScaler scaler, String managerId, int managerClientsN) {
+        if (managerClientsN <= 0) {
+            throw new IllegalArgumentException("managerClientsN must be positive: " + managerClientsN);
+        }
         this.queues = queues;
         this.store = store;
         this.scaler = scaler;
