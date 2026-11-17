@@ -16,12 +16,14 @@ public final class ImageTasks {
      * the job's result array. A URL that appears twice gets two indexes: each line is its own output entry.
      */
     public static List<ImageTask> fromInput(String jobId, String inputText) {
-        List<ImageTask> tasks = new ArrayList<>();
-        for (String line : inputText.split("\\R")) {   // \R: any line break (\n, \r\n)
+List<ImageTask> tasks = new ArrayList<>();
+        int lineIndex = 0;
+        for (String line : inputText.split("\\R", -1)) {
             String url = line.strip();
             if (!url.isEmpty()) {
-                tasks.add(new ImageTask(jobId, tasks.size(), url));
+                tasks.add(new ImageTask(jobId, lineIndex, url));
             }
+            lineIndex++;
         }
         return tasks;
     }
