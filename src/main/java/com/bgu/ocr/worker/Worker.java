@@ -35,7 +35,7 @@ public final class Worker implements Runnable {
                 pollOnce();
             } catch (InterruptedException e) {
                 return;
-            } catch (RuntimeException e) {   // e.g. SQS unreachable: the task (if any) comes back; keep working
+            } catch (RuntimeException | Error e) {   // e.g. SQS unreachable: the task (if any) comes back; keep working
                 System.err.println("Worker: " + e);
                 pause();
             }

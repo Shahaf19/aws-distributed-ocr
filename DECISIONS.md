@@ -109,7 +109,9 @@ Where the spec states something, we follow it; these are the points where the sp
     (fewer calls, slower recovery) and a progress-based one (also catches a stuck Manager, but falsely abandons jobs
     while Workers boot). Calls are negligible either way.
   - Limit: the heartbeat detects a **dead** Manager (silence), not a **stuck** one whose heartbeat thread still runs.
-    Mitigation: timeouts on every network call. To be explained in the README.
+    Mitigations: timeouts on every network call, and **fail-fast**: if any Manager thread dies of an uncaught error,
+    the whole process exits, so its heartbeat stops and recovery takes over (found in the first real-AWS run, where
+    a dead results thread left a "zombie" Manager holding its job). To be explained in the README.
   - Local App: while waiting, re-run "ensure an available Manager exists" every ~1 min, in case the dead
     Manager was the only one. If two `JobDone`s arrive (from a stalled Manager), use the first and ignore the second.
   - Not covered here: the dead Manager's Workers and queues (see the idle Workers question in Open).

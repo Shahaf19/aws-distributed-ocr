@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -167,6 +168,29 @@ public class ManagerTest {
 
         assertTrue(done.wasRejected());
         assertEquals("NewTask deleted: retrying can't help", 0, inbox.inFlightCount() + inbox.visibleCount());
+    }
+
+    @Test(timeout = 5000)
+    public void aDyingThreadShutsTheManagerDownInsteadOfLeavingAZombie() throws Exception {
+        CountDownLatch fatal = new CountDownLatch(1);
+        ObjectStore failingHard = new ObjectStore() {
+            @Override
+            public void put(String key, String text) {
+                store.put(key, text);
+            }
+
+            @Override
+            public String get(String key) {
+                throw new AssertionError("simulated JVM-level failure");   // an Error, not an Exception
+            }
+        };
+        Manager manager = new Manager(queues, failingHard, scalerRequests::add, "m1", 2, fatal::countDown);
+        manager.start();
+        managers.add(manager);
+
+        submit("job-1", "http://a.png");
+
+        fatal.await();   // the Start pool thread died, so the Manager asked to exit
     }
 
     @Test(timeout = 5000)
