@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.IntConsumer;
 
 /**
- * Wires the Manager's parts (see DECISIONS.md, "Manager threading model"): an inbox thread and a results thread,
+ * Wires the Manager's parts: an inbox thread and a results thread,
  * a Start pool and a Finish pool, and a scheduler for the heartbeat and the lifecycle check (terminate requests,
  * idleness). The jobs table is the state they share.
  */
@@ -227,7 +227,7 @@ public final class Manager {
         }
     }
 
-    // ---- lifecycle: terminate and idleness (DECISIONS.md, "Terminate shuts down all Managers", "Idle timeouts") ----
+    // ---- lifecycle: terminate (shuts down every Manager) and idleness ----
 
     /** Called by the inbox thread: tell every Manager (tags), then shut this one down. */
     private void onTerminate(ReceivedMessage message) {

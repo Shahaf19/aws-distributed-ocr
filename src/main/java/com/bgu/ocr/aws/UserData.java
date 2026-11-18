@@ -4,7 +4,7 @@ import com.bgu.ocr.Config;
 
 /**
  * Boot scripts for the instances we launch (EC2 "user-data": run once, as root, on first boot). Our AMI already has
- * Java, Tesseract and the AWS CLI (DECISIONS.md, "Bootstrapping"); the script fetches the current jar from S3 and
+ * Java, Tesseract and the AWS CLI (scripts/ami-setup.sh); the script fetches the current jar from S3 and
  * runs the right class. A restart loop brings the process back if it crashes, so an instance never idles.
  */
 public final class UserData {
