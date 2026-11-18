@@ -214,6 +214,10 @@ Where the spec states something, we follow it; these are the points where the sp
   Manager (`pending`) counts as alive, so its new Workers and queues are never touched. Failures are logged and never
   block the client's own job.
 - **AWS cost impact:** EC2 calls are free; one ListQueues per check. Saves the orphans' instance-hours.
+- **Found in the final run:** the per-minute check first used the spec's "available" rule (a Manager with room).
+  With two clients filling the only Manager, a waiting client saw "no room" and launched a second Manager nobody
+  needed. While waiting, the check now only requires *some* Manager to be alive; the "available" rule stays for the
+  check before a job is sent.
 
 ## Open
 - Scaling down while smaller jobs are still running.

@@ -95,7 +95,7 @@ public final class LocalApp {
                 }
             }
             if (System.nanoTime() >= nextCheck) {
-                managers.ensureManagerRunning(managerClientsN);   // the Manager may have died while we waited
+                managers.ensureManagerAlive(managerClientsN);   // the Manager may have died while we waited
                 nextCheck = System.nanoTime() + managerCheckInterval.toNanos();
             }
         }

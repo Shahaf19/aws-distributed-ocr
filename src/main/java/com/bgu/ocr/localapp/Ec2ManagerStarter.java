@@ -32,10 +32,21 @@ public final class Ec2ManagerStarter implements ManagerStarter {
     public void ensureManagerRunning(int managerClientsN) {
         List<InstanceInfo> managers = ec2.instancesWithRole(Ec2Tags.MANAGER);
         cleanUpOrphans(Orphans.aliveIds(managers));
-
-        if (ManagerAvailability.anyAvailable(managers, managerClientsN)) {
-            return;
+        if (!ManagerAvailability.anyAvailable(managers, managerClientsN)) {
+            launchManager(managerClientsN);
         }
+    }
+
+    @Override
+    public void ensureManagerAlive(int managerClientsN) {
+        List<InstanceInfo> managers = ec2.instancesWithRole(Ec2Tags.MANAGER);
+        cleanUpOrphans(Orphans.aliveIds(managers));
+        if (!ManagerAvailability.anyAlive(managers)) {
+            launchManager(managerClientsN);
+        }
+    }
+
+    private void launchManager(int managerClientsN) {
         if (ec2.aliveInstanceCount() >= Config.MAX_INSTANCES) {
             System.err.println("No available Manager, and the " + Config.MAX_INSTANCES
                     + "-instance cap is reached: the job waits in the inbox until a Manager has room");

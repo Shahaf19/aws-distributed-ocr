@@ -36,6 +36,9 @@ credentials
 # Local test input/output
 *.tmp
 
+# Generated study material (scripts/export-for-notebooklm.ps1)
+notebooklm/
+
 # Tesseract language data (downloaded: tessdata_fast/eng.traineddata)
 tessdata/
 
