@@ -54,6 +54,21 @@ public class ManagerAvailabilityTest {
     }
 
     @Test
+    public void aFullManagerIsStillAlive() {
+        List<InstanceInfo> busyWithOurJob = List.of(manager("running", "2", false));
+
+        assertFalse("not available for a new job", ManagerAvailability.anyAvailable(busyWithOurJob, 2));
+        assertTrue("but alive: a waiting client must not launch another", ManagerAvailability.anyAlive(busyWithOurJob));
+    }
+
+    @Test
+    public void terminatingOrDeadManagersAreNotAlive() {
+        assertFalse(ManagerAvailability.anyAlive(List.of(
+                manager("running", "0", true),
+                manager("terminated", "0", false))));
+    }
+
+    @Test
     public void oneAvailableAmongSeveralIsEnough() {
         assertTrue(ManagerAvailability.anyAvailable(List.of(
                 manager("running", "2", false),

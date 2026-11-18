@@ -18,6 +18,12 @@ public final class Ec2Tags {
     public static final String STATUS = "status";
     public static final String TERMINATING = "terminating";
 
+    /**
+     * On a Manager: the terminate message's SQS SentTimestamp (epoch millis). Jobs sent before it are rejected, jobs
+     * sent after it are left for a new Manager. Absent when a Manager shuts down because it was idle.
+     */
+    public static final String TERMINATE_SENT_AT = "terminateSentAt";
+
     /** On a Worker: its Manager's instance id. */
     public static final String MANAGER_ID = "managerId";
 

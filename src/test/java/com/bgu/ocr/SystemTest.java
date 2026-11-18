@@ -15,6 +15,7 @@ import com.bgu.ocr.aws.InMemoryObjectStore;
 import com.bgu.ocr.aws.InMemoryQueueAdmin;
 import com.bgu.ocr.localapp.LocalApp;
 import com.bgu.ocr.localapp.LocalAppArgs;
+import com.bgu.ocr.manager.FakeFleet;
 import com.bgu.ocr.manager.FakeWorker;
 import com.bgu.ocr.manager.Manager;
 import com.bgu.ocr.messages.JobDone;
@@ -32,7 +33,7 @@ public class SystemTest {
     public void localAppGetsItsHtmlThroughTheManager() throws Exception {
         InMemoryQueueAdmin queues = new InMemoryQueueAdmin(10);
         InMemoryObjectStore store = new InMemoryObjectStore();
-        Manager manager = new Manager(queues, store, needed -> { }, "m1", 2);
+        Manager manager = new Manager(queues, store, needed -> { }, new FakeFleet().forManager("m1"), "m1", 2);
         manager.start();
         FakeWorker worker = new FakeWorker(queues.create(Manager.taskQueueName("m1")),
                 queues.create(Manager.resultsQueueName("m1"))).startInBackground();

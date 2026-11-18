@@ -48,6 +48,15 @@ public final class Config {
     /** After this many deliveries an ImageTask is a poison message: the Worker reports an error instead of retrying. */
     public static final int MAX_TASK_ATTEMPTS = 3;
 
+    /** How often a Manager checks for a terminate request (its tag) and for idleness. EC2 reads are free. */
+    public static final int LIFECYCLE_CHECK_SECONDS = 30;
+
+    /** A Manager with no jobs this long terminates its Workers (the next job launches new ones). */
+    public static final int IDLE_WORKERS_MINUTES = 5;
+
+    /** A Manager with no jobs this long shuts itself down (DECISIONS.md, "Idle timeouts"). */
+    public static final int IDLE_MANAGER_MINUTES = 10;
+
     /** After this many deliveries of a NewTask whose start keeps failing, the Manager rejects it to the client. */
     public static final int MAX_START_ATTEMPTS = 3;
 

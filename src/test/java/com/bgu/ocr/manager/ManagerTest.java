@@ -4,10 +4,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -24,6 +26,7 @@ import com.bgu.ocr.messages.Json;
 import com.bgu.ocr.messages.NewTask;
 import com.bgu.ocr.messages.OcrResult;
 import com.bgu.ocr.messages.Summary;
+import com.bgu.ocr.messages.Terminate;
 
 /** The whole Manager on in-memory queues/storage, with fake Workers. */
 public class ManagerTest {
@@ -34,13 +37,27 @@ public class ManagerTest {
     private final List<Integer> scalerRequests = new CopyOnWriteArrayList<>();
     private final List<Manager> managers = new ArrayList<>();
     private final List<FakeWorker> workers = new ArrayList<>();
+    private final FakeFleet fleet = new FakeFleet();
+
+    /** Lifecycle checks are rare and idle limits long here, so they never interfere with the job tests. */
+    private static final Manager.Timings QUIET =
+            new Manager.Timings(Duration.ofMinutes(1), Duration.ofHours(1), Duration.ofHours(1));
+
+    /** Fast checks, for the terminate tests. */
+    private static final Manager.Timings ALERT =
+            new Manager.Timings(Duration.ofMillis(20), Duration.ofHours(1), Duration.ofHours(1));
 
     private Manager startManager(String id) {
-        return startManager(id, store);
+        return startManager(id, store, 2, QUIET);
     }
 
     private Manager startManager(String id, ObjectStore withStore) {
-        Manager manager = new Manager(queues, withStore, scalerRequests::add, id, 2);
+        return startManager(id, withStore, 2, QUIET);
+    }
+
+    private Manager startManager(String id, ObjectStore withStore, int managerClientsN, Manager.Timings timings) {
+        Manager manager = new Manager(queues, withStore, scalerRequests::add, fleet.forManager(id), id,
+                managerClientsN, timings, () -> { });
         manager.start();
         managers.add(manager);
         return manager;
@@ -184,7 +201,8 @@ public class ManagerTest {
                 throw new AssertionError("simulated JVM-level failure");   // an Error, not an Exception
             }
         };
-        Manager manager = new Manager(queues, failingHard, scalerRequests::add, "m1", 2, fatal::countDown);
+        Manager manager = new Manager(queues, failingHard, scalerRequests::add, fleet.forManager("m1"), "m1", 2,
+                QUIET, fatal::countDown);
         manager.start();
         managers.add(manager);
 
@@ -211,5 +229,66 @@ public class ManagerTest {
 
         assertTrue(done.wasRejected());
         assertTrue(done.rejected(), done.rejected().contains("after " + Config.MAX_START_ATTEMPTS + " attempts"));
+    }
+
+    // ---- terminate and idleness ----
+
+    @Test(timeout = 10000)
+    public void terminateLetsTheInFlightJobFinishThenShutsEverythingDown() throws Exception {
+        Manager m1 = startManager("m1", store, 2, ALERT);
+        startWorkerFor("m1");
+        InMemoryQueue reply = submit("job-1", "http://a.png", "http://b.png");
+        inbox.send(Json.toJson(new Terminate()));
+
+        assertEquals("the in-flight job still completes", 2, summaryOf(awaitDone(reply)).size());
+        assertTrue(m1.awaitShutdown(5, TimeUnit.SECONDS));
+        assertTrue(fleet.events().toString(), fleet.events().containsAll(List.of(
+                "m1 marked all Managers terminating", "m1 terminated its Workers", "m1 terminated itself")));
+        assertFalse("own queues deleted", queues.exists(Manager.taskQueueName("m1")));
+        assertFalse(queues.exists(Manager.resultsQueueName("m1")));
+    }
+
+    @Test(timeout = 10000)
+    public void everyManagerShutsDownNotOnlyTheOneThatGotTheMessage() throws Exception {
+        Manager m1 = startManager("m1", store, 1, ALERT);
+        Manager m2 = startManager("m2", store, 1, ALERT);
+
+        inbox.send(Json.toJson(new Terminate()));   // only one of them can receive it
+
+        assertTrue(m1.awaitShutdown(5, TimeUnit.SECONDS));
+        assertTrue(m2.awaitShutdown(5, TimeUnit.SECONDS));
+        assertTrue(fleet.events().toString(),
+                fleet.events().containsAll(List.of("m1 terminated itself", "m2 terminated itself")));
+    }
+
+    @Test(timeout = 10000)
+    public void waitingJobsAreRejectedIfSentBeforeTheTerminateAndLeftForANewManagerIfAfter() throws Exception {
+        Manager m1 = startManager("m1", store, 1, ALERT);   // room for one job, and no Worker yet
+        InMemoryQueue replyA = submit("job-a", "http://a.png");
+        while (inbox.inFlightCount() == 0) {
+            Thread.sleep(5);   // m1 accepted job a and is now full
+        }
+        InMemoryQueue replyB = submit("job-b", "http://b.png");   // waits in the inbox
+        Thread.sleep(5);
+        fleet.requestTermination(System.currentTimeMillis());   // as if another Manager got the terminate
+        Thread.sleep(5);
+        submit("job-c", "http://c.png");   // sent after the terminate
+
+        assertTrue("waiting and sent before: rejected (the spec's response message)", awaitDone(replyB).wasRejected());
+        startWorkerFor("m1");   // only now: earlier, job a could finish first and m1 would rightly accept job b
+        assertFalse("in flight: completes", awaitDone(replyA).wasRejected());
+        assertTrue(m1.awaitShutdown(5, TimeUnit.SECONDS));
+        assertEquals("job c was released for a new Manager", 1, inbox.visibleCount());
+    }
+
+    @Test(timeout = 10000)
+    public void idleManagerStopsItsWorkersThenItself() throws Exception {
+        Manager m1 = startManager("m1", store, 2,
+                new Manager.Timings(Duration.ofMillis(20), Duration.ofMillis(100), Duration.ofMillis(300)));
+
+        assertTrue(m1.awaitShutdown(5, TimeUnit.SECONDS));
+        assertEquals(List.of("m1 terminated its Workers", "m1 marked itself terminating",
+                "m1 terminated its Workers", "m1 terminated itself"), fleet.events());
+        assertFalse(queues.exists(Manager.taskQueueName("m1")));
     }
 }

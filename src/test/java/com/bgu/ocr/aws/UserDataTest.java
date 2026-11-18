@@ -17,7 +17,8 @@ public class UserDataTest {
         assertTrue(script.contains("aws s3 cp s3://" + Config.BUCKET + "/" + Config.JAR_S3_KEY + " /opt/ocr/app.jar"));
         assertTrue(script.contains("INSTANCE_ID=$(curl"));
         assertTrue(script.contains("com.bgu.ocr.manager.Manager \"$INSTANCE_ID\" 3"));
-        assertTrue("restarts if the process exits", script.contains("while true; do"));
+        assertTrue("restarts after a crash", script.contains("while true; do"));
+        assertTrue("but not after a deliberate shutdown", script.contains("[ $code -eq 0 ] && break"));
     }
 
     @Test

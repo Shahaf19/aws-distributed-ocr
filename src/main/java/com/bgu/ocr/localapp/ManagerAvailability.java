@@ -16,10 +16,18 @@ public final class ManagerAvailability {
         return managers.stream().anyMatch(m -> isAvailable(m, managerClientsN));
     }
 
+    /** Some Manager is booting or running and not shutting down, whether or not it has room. */
+    public static boolean anyAlive(List<InstanceInfo> managers) {
+        return managers.stream().anyMatch(ManagerAvailability::isAliveAndStaying);
+    }
+
     static boolean isAvailable(InstanceInfo manager, int managerClientsN) {
-        return manager.isAlive()   // a Manager another client just launched (pending) counts: no duplicate launch
-                && !Ec2Tags.TERMINATING.equals(manager.tag(Ec2Tags.STATUS))
-                && activeClients(manager) < managerClientsN;
+        return isAliveAndStaying(manager) && activeClients(manager) < managerClientsN;
+    }
+
+    /** A Manager another client just launched (pending) counts: no duplicate launch. */
+    private static boolean isAliveAndStaying(InstanceInfo manager) {
+        return manager.isAlive() && !Ec2Tags.TERMINATING.equals(manager.tag(Ec2Tags.STATUS));
     }
 
     /** A Manager still booting has no tag yet: it serves nobody. */

@@ -16,6 +16,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 /** Finds, launches, tags and terminates our instances. EC2 API calls are not billed; instance time is. */
@@ -69,8 +70,24 @@ public final class Ec2Helper {
                 .toList();
     }
 
+    /** One instance by id, or empty if EC2 doesn't know it (e.g. a local test id). */
+    public Optional<InstanceInfo> instance(String instanceId) {
+        return describe(Filter.builder().name("instance-id").values(instanceId).build()).stream().findFirst();
+    }
+
     public void tag(String instanceId, String key, String value) {
-        ec2.createTags(b -> b.resources(instanceId).tags(Tag.builder().key(key).value(value).build()));
+        tagAll(List.of(instanceId), Map.of(key, value));
+    }
+
+    /** Applies all tags to all instances in one call. */
+    public void tagAll(Collection<String> instanceIds, Map<String, String> tags) {
+        if (instanceIds.isEmpty()) {
+            return;
+        }
+        List<Tag> tagList = tags.entrySet().stream()
+                .map(e -> Tag.builder().key(e.getKey()).value(e.getValue()).build())
+                .toList();
+        ec2.createTags(b -> b.resources(instanceIds).tags(tagList));
     }
 
     public void terminate(Collection<String> instanceIds) {
