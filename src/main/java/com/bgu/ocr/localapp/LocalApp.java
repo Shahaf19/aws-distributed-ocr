@@ -113,8 +113,9 @@ public final class LocalApp {
 
         S3ObjectStore store = S3ObjectStore.withDefaultClient();
         store.ensureBucket();
-        ManagerStarter managers = new Ec2ManagerStarter(Ec2Helper.withDefaultClient());
-        LocalApp app = new LocalApp(SqsQueueAdmin.withDefaultClient(), store, managers, Duration.ofMinutes(1));
+        SqsQueueAdmin queues = SqsQueueAdmin.withDefaultClient();
+        ManagerStarter managers = new Ec2ManagerStarter(Ec2Helper.withDefaultClient(), queues);
+        LocalApp app = new LocalApp(queues, store, managers, Duration.ofMinutes(1));
 
         try {
             JobDone done = app.run(parsed);

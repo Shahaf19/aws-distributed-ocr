@@ -1,5 +1,6 @@
 package com.bgu.ocr.aws;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -49,6 +50,11 @@ public final class InMemoryQueueAdmin implements QueueAdmin {
         if (removed != null) {
             removed.markDeleted();
         }
+    }
+
+    @Override
+    public List<String> urlsStartingWith(String namePrefix) {
+        return queues.keySet().stream().filter(url -> url.startsWith(urlOf(namePrefix))).sorted().toList();
     }
 
     public boolean exists(String name) {

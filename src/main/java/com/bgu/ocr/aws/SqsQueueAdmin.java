@@ -6,6 +6,8 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /** {@link QueueAdmin} for real SQS queues. All queues share one client (and its HTTP connection pool). */
@@ -42,5 +44,12 @@ public final class SqsQueueAdmin implements QueueAdmin {
     @Override
     public void delete(MessageQueue queue) {
         sqs.deleteQueue(b -> b.queueUrl(queue.url()));
+    }
+
+    @Override
+    public List<String> urlsStartingWith(String namePrefix) {
+        List<String> urls = new ArrayList<>();
+        sqs.listQueuesPaginator(b -> b.queueNamePrefix(namePrefix)).queueUrls().forEach(urls::add);
+        return urls;
     }
 }

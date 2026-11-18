@@ -57,13 +57,16 @@ Follows the spec's "Getting Started" order.
   message contract; AWS wrappers (verified against real SQS/S3); OCR service; Local App; Manager core (inbox and
   results loops, Start/Finish pools, heartbeat, crash recovery, retry vs reject of unstartable jobs); Worker
   (download with timeouts, OCR, error results, poison-task limit, one task per receive).
-- **Not yet:** `ManagerStarter` (Local App) and `WorkerScaler` (Manager) are stubs; the terminate flow and idle
-  timeouts are not implemented.
-- **Next, in spec order:**
-  1. All three together on the local machine with real SQS/S3 (needs a lab session).
-  2. On EC2: `Ec2Helper` (manager lookup and launch, scaling `m − k` ≤ 19), bootstrapping (user-data/AMI,
-     Tesseract on Linux), terminate flow, idle timeouts. Start with a skeleton EC2 run (one instance running the
-     jar) to surface Academy/IAM/Tesseract problems well before the deadline.
+- **EC2, done and verified with real runs:** AMI (`scripts/ami-setup.sh`, ID in `Config`); boot scripts that fetch
+  the jar from S3; the Local App launching a Manager when none is available; the Manager scaling Workers (`m − k`,
+  cap 19) and publishing its `activeClients` tag; the terminate flow (every instance terminated and every queue but
+  the shared inbox deleted, ~55 s after terminate); idle timeouts; orphan cleanup in the Local App's periodic check.
+- **Next:** the README the spec requires (how it works, AMI + instance type, run time, n, and the design questions:
+  security, scalability, persistence/failures, threads, termination, limitations, Workers' load); a run on the
+  spec's full sample input; optionally the open items in `DECISIONS.md`.
+- **Dev notes:** upload the jar to `s3://dsp-ocr-a1/app/` after each code change (instances fetch it at boot); never
+  rebuild a jar that a running local process uses (it loads classes lazily); instances log to `/var/log/ocr.log`
+  and to the console ("Get system log").
 - **Open decisions:** see "Open" in `DECISIONS.md`.
 
 ## Local environment notes

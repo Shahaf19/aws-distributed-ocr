@@ -1,5 +1,7 @@
 package com.bgu.ocr.aws;
 
+import java.util.List;
+
 /** Creates, opens and deletes queues. Separate from {@link MessageQueue}, which only senders/receivers need. */
 public interface QueueAdmin {
 
@@ -16,4 +18,7 @@ public interface QueueAdmin {
     MessageQueue open(String url);
 
     void delete(MessageQueue queue);
+
+    /** URLs of the existing queues whose name starts with {@code namePrefix} (e.g. to find a dead Manager's queues). */
+    List<String> urlsStartingWith(String namePrefix);
 }

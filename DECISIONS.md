@@ -84,6 +84,12 @@ Where the spec states something, we follow it; these are the points where the sp
   - Sent **before** terminate: reply "rejected: system is terminating" to its reply queue (`NewTask` carries the URL).
   - Sent **after** terminate: don't touch it (make it visible again). It comes from a Local App that saw only
     terminating Managers and therefore started a new Manager, which will pick it up.
+- **Implementation:** the terminate's SentTimestamp travels in a second tag (`terminateSentAt`), so every Manager
+  applies the same cutoff. Managers check their own tag every 30 s; a full Manager (which doesn't read the inbox)
+  learns about the terminate this way. Shutdown order: stop the inbox loop → drain the inbox (reject jobs sent
+  before the cutoff, hold later ones) until in-flight jobs finish → terminate its Workers → stop its threads → delete
+  its two queues → release the held jobs → terminate its instance. The boot script restarts the process only after
+  a crash (non-zero exit), never after this deliberate shutdown.
 - **AWS cost impact:** checking tags is free. Every instance is terminated, so there are no leftover instance-hours.
 
 ## Manager crash recovery: state in memory, the inbox message is the backup
@@ -133,7 +139,10 @@ Where the spec states something, we follow it; these are the points where the sp
   and the waiting Local App's periodic "ensure an available Manager exists" starts a new one.
 - **AWS cost impact:** saves idle instance-hours, which is the main cost. EC2 API calls (Describe/Run/Terminate)
   are not billed.
-- **Implementation:** later, together with scaling.
+- **Numbers and implementation:** checked every 30 s; Workers are terminated after **5 min** without jobs (the next
+  job relaunches them, ~1 min boot), the Manager after **10 min**. An idle Manager first tags itself `terminating`
+  (so clients start a new one if needed), then runs the terminate shutdown without rejecting anything: jobs that
+  arrive meanwhile are held and released for the next Manager.
 
 ## Worker failures: fixed visibility timeout + receive-count limit for poison images
 - **Decision:** how an `ImageTask` survives a Worker that crashes or stalls ("some other worker should be able to
@@ -192,12 +201,25 @@ Where the spec states something, we follow it; these are the points where the sp
 - **AWS cost impact:** AMI snapshot storage (~8 GB, about $0.40/month); one S3 GET of the jar (~72 MB) per boot,
   free in-region; boots stay short, so less idle billed time than C.
 
+## Orphan Workers and queues: cleaned up by the Local Apps' periodic Manager check
+- **Decision:** a Manager that crashes (rather than shutting down) leaves Workers running and billing, plus its two
+  queues. Who removes them?
+- **Options and tradeoffs:**
+  - A: nobody; they go away on the next terminate. Simplest, but orphans bill until then.
+  - B: the Local App's "ensure an available Manager" step, which already lists the Managers at startup and every
+    minute while waiting: terminate running Workers whose `managerId` isn't an alive Manager, and delete
+    `ocr-tasks-*` / `ocr-results-*` queues of non-alive Managers. One extra Describe/ListQueues per check.
+  - C: each Worker checks that its Manager is alive. Worker code plus EC2 calls from every Worker.
+- **Choice and reason:** B. Central, cheap, and it runs exactly when it matters (clients are waiting). A booting
+  Manager (`pending`) counts as alive, so its new Workers and queues are never touched. Failures are logged and never
+  block the client's own job.
+- **AWS cost impact:** EC2 calls are free; one ListQueues per check. Saves the orphans' instance-hours.
+
 ## Open
 - Scaling down while smaller jobs are still running.
 - Fairness between jobs on one task queue (head-of-line blocking): interleaved sending in `StartJob` (Manager-only,
   no contract change). Per-job task queues are out: the spec says "all worker nodes take their messages from the
   same SQS queue".
-- Orphan Workers and queues of a dead Manager.
 
 ## Settled by the spec (no choice left)
 - **Two Managers scaling at the same moment** could together exceed 19 instances (the synchronized scaling method

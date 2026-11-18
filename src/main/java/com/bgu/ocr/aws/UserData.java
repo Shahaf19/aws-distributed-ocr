@@ -5,7 +5,7 @@ import com.bgu.ocr.Config;
 /**
  * Boot scripts for the instances we launch (EC2 "user-data": run once, as root, on first boot). Our AMI already has
  * Java, Tesseract and the AWS CLI (DECISIONS.md, "Bootstrapping"); the script fetches the current jar from S3 and
- * runs the right class. A restart loop brings the process back if it ever exits, so an instance never idles.
+ * runs the right class. A restart loop brings the process back if it crashes, so an instance never idles.
  */
 public final class UserData {
 
@@ -35,9 +35,12 @@ public final class UserData {
                 + "  echo 'jar download failed, retrying in 5 s'; sleep 5\n"
                 + "done\n"
                 + prepare
+                // restart after a crash (non-zero exit); a deliberate shutdown exits 0 and its instance is terminating
                 + "while true; do\n"
                 + "  " + javaCommand + "\n"
-                + "  echo \"process exited with code $?, restarting in 5 s\"; sleep 5\n"
+                + "  code=$?\n"
+                + "  [ $code -eq 0 ] && break\n"
+                + "  echo \"process exited with code $code, restarting in 5 s\"; sleep 5\n"
                 + "done\n";
     }
 }
