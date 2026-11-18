@@ -26,7 +26,7 @@ public final class JobState {
 
     /**
      * @param inboxMessage the delivery of the NewTask; its receipt handle is used for the visibility heartbeat and to
-     *                     delete the message once the job is finished (crash recovery, see DECISIONS.md)
+     *                     delete the message once the job is finished (until then, it is the job's crash backup)
      */
     public JobState(NewTask task, ReceivedMessage inboxMessage) {
         this.task = Objects.requireNonNull(task, "task");

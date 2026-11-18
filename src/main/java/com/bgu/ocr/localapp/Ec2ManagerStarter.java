@@ -16,7 +16,7 @@ import java.util.Set;
 /**
  * The spec's "checks if a Manager node is available on the EC2 cloud. If it is not, the application will start a new
  * manager node". Run at startup and about once a minute while waiting (a Manager may have died meanwhile). Each run
- * also removes what dead Managers left behind (DECISIONS.md, "Orphan Workers and queues").
+ * also removes what crashed Managers left behind: their Workers and their queues.
  */
 public final class Ec2ManagerStarter implements ManagerStarter {
 

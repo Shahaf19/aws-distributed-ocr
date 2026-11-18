@@ -15,7 +15,7 @@ public final class Config {
     public static final String INBOX_QUEUE = "ocr-manager-inbox";
 
     /**
-     * Our AMI (DECISIONS.md, "Bootstrapping"): Ubuntu 24.04 + OpenJDK 17 + Tesseract 5.3.4 (eng) + AWS CLI v2,
+     * Our AMI: Ubuntu 24.04 + OpenJDK 17 + Tesseract 5.3.4 (eng) + AWS CLI v2,
      * built from scripts/ami-setup.sh. The jar is not inside; instances fetch it from S3 at boot.
      */
     public static final String AMI_ID = "ami-0725885594e989fad";
@@ -54,7 +54,7 @@ public final class Config {
     /** A Manager with no jobs this long terminates its Workers (the next job launches new ones). */
     public static final int IDLE_WORKERS_MINUTES = 5;
 
-    /** A Manager with no jobs this long shuts itself down (DECISIONS.md, "Idle timeouts"). */
+    /** A Manager with no jobs this long shuts itself down, so an unused system stops billing. */
     public static final int IDLE_MANAGER_MINUTES = 10;
 
     /** After this many deliveries of a NewTask whose start keeps failing, the Manager rejects it to the client. */

@@ -39,6 +39,13 @@ credentials
 # Generated study material (scripts/export-for-notebooklm.ps1)
 notebooklm/
 
+# Working notes, kept locally only
+DECISIONS.md
+CLAUDE.md
+
+# The submission zip (scripts/make-submission.ps1)
+dist/
+
 # Tesseract language data (downloaded: tessdata_fast/eng.traineddata)
 tessdata/
 

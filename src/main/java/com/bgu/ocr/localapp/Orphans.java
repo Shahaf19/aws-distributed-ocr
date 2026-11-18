@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 
 /**
  * What a Manager that died without shutting down leaves behind: Workers still running (and billing) and its two
- * queues (DECISIONS.md, "Orphan Workers and queues"). A Manager that shuts down normally cleans up after itself.
+ * queues. A Manager that shuts down normally cleans up after itself.
  */
 public final class Orphans {
 

@@ -5,7 +5,7 @@ import com.bgu.ocr.aws.MessageQueue;
 /**
  * Keeps every in-flight job's NewTask hidden in the inbox: each run resets it to {@code visibilitySeconds} from now.
  * Scheduled by the Manager every {@code Config.INBOX_HEARTBEAT_SECONDS}. If the Manager dies, the beats stop and the
- * NewTasks reappear for another Manager (crash recovery, see DECISIONS.md).
+ * NewTasks reappear in the inbox, and another Manager redoes those jobs (crash recovery).
  */
 public final class Heartbeat implements Runnable {
 

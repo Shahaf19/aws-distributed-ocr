@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.function.BiConsumer;
 
 /**
- * Reads the inbox for a shutting-down Manager instead of accepting jobs (DECISIONS.md, "Terminate shuts down all
- * Managers"). A NewTask sent before the terminate gets a "rejected" reply (the spec: "creates response messages for
+ * Reads the inbox for a shutting-down Manager instead of accepting jobs. A NewTask sent before the terminate gets a "rejected" reply (the spec: "creates response messages for
  * the jobs, if needed"). One sent after it comes from a client that will start a new Manager: it is held, then
  * released at the end for that Manager. Extra terminate messages and garbage are deleted.
  */

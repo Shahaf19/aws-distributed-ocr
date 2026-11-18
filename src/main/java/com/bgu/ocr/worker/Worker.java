@@ -13,7 +13,7 @@ import com.bgu.ocr.ocr.OcrService;
 
 /**
  * The Worker's life cycle (spec): repeatedly get a message, download the image, OCR it, notify the Manager, remove
- * the message. Takes one task at a time (DECISIONS.md: "Workers take one task per receive"). Runs until its
+ * the message. Takes one task at a time, so work spreads evenly over the Workers. Runs until its
  * instance is terminated; locally, stop it by interrupting its thread.
  */
 public final class Worker implements Runnable {

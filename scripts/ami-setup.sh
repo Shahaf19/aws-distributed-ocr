@@ -1,5 +1,5 @@
 #!/bin/bash
-# AMI recipe (DECISIONS.md, "Bootstrapping", option B): the software that rarely changes.
+# AMI recipe: the software that rarely changes is baked into the image, so instances start fast.
 # Base: Canonical's Ubuntu 24.04 (amd64). Runs as root, e.g. as the user-data of the instance the AMI is built from.
 # Our jar is NOT baked in: Manager/Worker user-data downloads the current one from S3 at boot.
 set -euxo pipefail
