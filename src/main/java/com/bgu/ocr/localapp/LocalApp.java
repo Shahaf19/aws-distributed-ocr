@@ -1,6 +1,7 @@
 package com.bgu.ocr.localapp;
 
 import com.bgu.ocr.Config;
+import com.bgu.ocr.aws.Ec2Helper;
 import com.bgu.ocr.aws.MessageQueue;
 import com.bgu.ocr.aws.ObjectStore;
 import com.bgu.ocr.aws.QueueAdmin;
@@ -112,8 +113,8 @@ public final class LocalApp {
 
         S3ObjectStore store = S3ObjectStore.withDefaultClient();
         store.ensureBucket();
-        ManagerStarter notYetImplemented = n -> System.out.println("(Manager check: not implemented yet)");
-        LocalApp app = new LocalApp(SqsQueueAdmin.withDefaultClient(), store, notYetImplemented, Duration.ofMinutes(1));
+        ManagerStarter managers = new Ec2ManagerStarter(Ec2Helper.withDefaultClient());
+        LocalApp app = new LocalApp(SqsQueueAdmin.withDefaultClient(), store, managers, Duration.ofMinutes(1));
 
         try {
             JobDone done = app.run(parsed);

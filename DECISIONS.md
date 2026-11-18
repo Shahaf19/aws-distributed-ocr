@@ -171,13 +171,33 @@ Where the spec states something, we follow it; these are the points where the sp
 - **AWS cost impact:** one receive per image instead of one per 10: 1,000 images = 1,000 vs 100 calls,
   about $0.0004 apart.
 
+## Bootstrapping: a custom AMI with the software, the jar fetched from S3 at boot
+- **Decision:** how Manager and Worker instances get Linux, Java, Tesseract and our jar. The spec recommends "an AMI
+  composed of any data needed … Linux, Java JDK, Amazon AWS cli, the jar file …", with user-data that downloads
+  everything at boot as the fallback "in case AWS disable the option for creating new AMI".
+- **Options and tradeoffs:**
+  - A: everything in the AMI, including the jar; user-data only starts it. Exactly the spec and the fastest boot,
+    but every code change means a new AMI (launch, copy jar, create image ~5–10 min, update the ID, delete the old one).
+  - B: an AMI with Ubuntu 24.04 + Java 17 + Tesseract 5; user-data downloads the current jar from our S3 bucket and
+    starts the right class with its arguments. Same fast boot (+ a few seconds of download); a code change is just
+    a jar upload. Bends the spec's "jar in the AMI".
+  - C: no custom AMI; user-data installs everything on every boot. Spec's fallback only; 2–4 min of installs per
+    instance, paid by every Worker.
+- **Choice and reason:** B. The software that rarely changes is baked in (fast boot, as the spec intends); our code,
+  which changes constantly, stays a single S3 upload. For the final submission, consider baking the final jar in
+  (A) to match the spec literally.
+- **Settled by platform/spec:** Ubuntu 24.04 (the only common base with a Tesseract 5 package, which Tess4J 5.20
+  needs); credentials from the Academy `LabInstanceProfile`, never in the jar or user-data; `t3.micro` to start
+  (move Workers to `t3.small` if OCR runs out of memory). The AMI's install steps live in the repo as a script.
+- **AWS cost impact:** AMI snapshot storage (~8 GB, about $0.40/month); one S3 GET of the jar (~72 MB) per boot,
+  free in-region; boots stay short, so less idle billed time than C.
+
 ## Open
 - Scaling down while smaller jobs are still running.
 - Fairness between jobs on one task queue (head-of-line blocking): interleaved sending in `StartJob` (Manager-only,
   no contract change). Per-job task queues are out: the spec says "all worker nodes take their messages from the
   same SQS queue".
 - Orphan Workers and queues of a dead Manager.
-- Bootstrapping: custom AMI vs user-data; instance type.
 
 ## Settled by the spec (no choice left)
 - **Two Managers scaling at the same moment** could together exceed 19 instances (the synchronized scaling method
