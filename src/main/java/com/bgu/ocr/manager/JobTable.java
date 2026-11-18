@@ -3,6 +3,7 @@ package com.bgu.ocr.manager;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.IntConsumer;
 
 /**
  * The Manager's in-flight jobs (jobId → JobState), shared by all its threads. Also the room check for
@@ -11,22 +12,39 @@ import java.util.Map;
 public final class JobTable {
 
     private final Map<String, JobState> jobs = new HashMap<>();   // guarded by this
+    private volatile IntConsumer sizeListener = size -> { };
+
+    /** Told the new number of jobs after each add/remove, outside the lock (it may make a network call). */
+    public void onSizeChange(IntConsumer listener) {
+        this.sizeListener = listener;
+    }
 
     public synchronized JobState get(String jobId) {
         return jobs.get(jobId);
     }
 
-    public synchronized void add(JobState job) {
-        if (jobs.putIfAbsent(job.jobId(), job) != null) {
-            throw new IllegalStateException("job already in the table: " + job.jobId());
+    public void add(JobState job) {
+        int size;
+        synchronized (this) {
+            if (jobs.putIfAbsent(job.jobId(), job) != null) {
+                throw new IllegalStateException("job already in the table: " + job.jobId());
+            }
+            size = jobs.size();
         }
+        sizeListener.accept(size);
     }
 
     /** Removes this job (not a newer one with the same id) and wakes the inbox loop, since a slot is now free. */
-    public synchronized void remove(JobState job) {
-        if (jobs.remove(job.jobId(), job)) {
+    public void remove(JobState job) {
+        int size;
+        synchronized (this) {
+            if (!jobs.remove(job.jobId(), job)) {
+                return;
+            }
             notifyAll();
+            size = jobs.size();
         }
+        sizeListener.accept(size);
     }
 
     public synchronized int size() {

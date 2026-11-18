@@ -1,6 +1,8 @@
 package com.bgu.ocr.manager;
 
 import com.bgu.ocr.Config;
+import com.bgu.ocr.aws.Ec2Helper;
+import com.bgu.ocr.aws.Ec2Tags;
 import com.bgu.ocr.aws.MessageQueue;
 import com.bgu.ocr.aws.ObjectMissingException;
 import com.bgu.ocr.aws.ObjectStore;
@@ -18,6 +20,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.IntConsumer;
 
 /**
  * Wires the Manager's parts (see DECISIONS.md, "Manager threading model"): an inbox thread and a results thread,
@@ -89,10 +92,26 @@ public final class Manager {
         return "ocr-results-" + managerId;
     }
 
+    /** A Manager's own two queues. */
+    public record OwnQueues(MessageQueue tasks, MessageQueue results) {
+    }
+
+    /** Creates (or finds) a Manager's own queues: the one place that knows their names and settings. */
+    public static OwnQueues ownQueues(QueueAdmin queues, String managerId) {
+        return new OwnQueues(queues.create(taskQueueName(managerId), Config.TASK_VISIBILITY_SECONDS),
+                queues.create(resultsQueueName(managerId)));
+    }
+
+    /** Told the number of jobs (clients) this Manager serves whenever it changes; call before {@link #start()}. */
+    public void onActiveClientsChange(IntConsumer listener) {
+        jobs.onSizeChange(listener);
+    }
+
     public synchronized void start() {
         inbox = queues.create(Config.INBOX_QUEUE, Config.INBOX_VISIBILITY_SECONDS);
-        taskQueue = queues.create(taskQueueName(managerId), Config.TASK_VISIBILITY_SECONDS);
-        MessageQueue resultsQueue = queues.create(resultsQueueName(managerId));
+        OwnQueues own = ownQueues(queues, managerId);
+        taskQueue = own.tasks();
+        MessageQueue resultsQueue = own.results();
 
         startPool = Executors.newFixedThreadPool(POOL_SIZE, threadsNamed("start"));
         finishPool = Executors.newFixedThreadPool(POOL_SIZE, threadsNamed("finish"));
@@ -176,14 +195,27 @@ public final class Manager {
         System.out.println("Terminate received: the terminate flow is part of the EC2 step");
     }
 
-    /** {@code java -cp aws-distributed-ocr.jar com.bgu.ocr.manager.Manager managerId manager-clients-n} */
+    /**
+     * {@code java -cp aws-distributed-ocr.jar com.bgu.ocr.manager.Manager managerId manager-clients-n}. On EC2 the
+     * boot script passes the instance id as managerId (see UserData).
+     */
     public static void main(String[] args) {
         if (args.length != 2) {
             System.err.println("usage: Manager managerId manager-clients-n");
             System.exit(2);
         }
-        WorkerScaler notYetImplemented = needed -> System.out.println("(scaling to " + needed + " Workers: EC2 step)");
-        new Manager(SqsQueueAdmin.withDefaultClient(), S3ObjectStore.withDefaultClient(), notYetImplemented,
-                args[0], Integer.parseInt(args[1])).start();
+        String managerId = args[0];
+        QueueAdmin queues = SqsQueueAdmin.withDefaultClient();
+        Ec2Helper ec2 = Ec2Helper.withDefaultClient();
+        OwnQueues own = ownQueues(queues, managerId);
+        WorkerScaler scaler = new Ec2WorkerScaler(ec2, managerId, own.tasks().url(), own.results().url());
+
+        Manager manager = new Manager(queues, S3ObjectStore.withDefaultClient(), scaler, managerId,
+                Integer.parseInt(args[1]));
+        ActiveClientsPublisher tag = new ActiveClientsPublisher(
+                n -> ec2.tag(managerId, Ec2Tags.ACTIVE_CLIENTS, String.valueOf(n)));
+        manager.onActiveClientsChange(tag);
+        tag.accept(0);
+        manager.start();
     }
 }
