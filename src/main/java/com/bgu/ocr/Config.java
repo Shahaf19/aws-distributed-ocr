@@ -14,6 +14,27 @@ public final class Config {
     /** The shared inbox all Managers pull from. */
     public static final String INBOX_QUEUE = "ocr-manager-inbox";
 
+    /**
+     * Our AMI (DECISIONS.md, "Bootstrapping"): Ubuntu 24.04 + OpenJDK 17 + Tesseract 5.3.4 (eng) + AWS CLI v2,
+     * built from scripts/ami-setup.sh. The jar is not inside; instances fetch it from S3 at boot.
+     */
+    public static final String AMI_ID = "ami-0725885594e989fad";
+
+    /** Where the AMI's Tesseract package puts its language data. */
+    public static final String TESSDATA_ON_AMI = "/usr/share/tesseract-ocr/5/tessdata";
+
+    /** The jar every instance downloads at boot (upload a new one after each code change). */
+    public static final String JAR_S3_KEY = "app/aws-distributed-ocr.jar";
+
+    /** 2 vCPUs, 1 GB; move Workers to t3.small if OCR runs out of memory on big images. */
+    public static final String INSTANCE_TYPE = "t3.micro";
+
+    /** AWS Academy's role for EC2: gives instances SQS/S3/EC2 access, so no credentials are ever shipped. */
+    public static final String INSTANCE_PROFILE = "LabInstanceProfile";
+
+    /** The spec's hard limit on running instances (Manager(s) + Workers). */
+    public static final int MAX_INSTANCES = 19;
+
     /** SQS maximum: an empty receive costs one call per 20 s instead of a busy loop. */
     public static final int LONG_POLL_SECONDS = 20;
 
