@@ -1,6 +1,5 @@
 # OCR in the Cloud 
 
-**Submitted by:** Shahaf Cohen (ID: 318736949) and Omri Hirsch (ID: 209898980)
 
 A distributed system that reads a list of image URLs, runs OCR (text recognition) on every image in parallel on
 AWS, and writes an HTML page with each image and its text.
