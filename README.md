@@ -53,11 +53,13 @@ The parts never call each other directly. They only talk through **SQS queues** 
 - **AMI:** `ami-0725885594e989fad`, Ubuntu 24.04 with Java 17, Tesseract 5.3.4 (English) and the AWS CLI. Our jar
   is not inside the AMI: every instance downloads the current jar from S3 when it starts.
 - **Instance type:** `t3.micro` for the Manager and the Workers.
-- **Time and n** (final run: the assignment's sample input, 24 URLs, with **two clients at the same time**,
+- **Time and n:** (final run: 24 URLs, with **two clients at the same time**,
   `manager-clients-n` = 2, **`worker-files-n` = 5**):
   - One Manager served both clients and started **5 Workers** (24 / 5 rounded up; the second job needed no more).
-  - Client 1: **97 seconds** from start to HTML (this includes starting the Manager and the Workers).
-    Client 2, started 15 seconds later with `terminate`: **74 seconds**.
+  - Each time below runs from the moment that client was started until its HTML file was written.
+  - Client 1: **97 seconds**. This includes launching the Manager (no Manager existed) and the Workers.
+  - Client 2, started 15 seconds after client 1, with `terminate`: **74 seconds**. It was faster because it found
+    the Manager that client 1 had already launched, so it didn't wait for a full boot.
   - After `terminate`, every instance was shut down and every queue but the shared inbox deleted, within about
     two minutes.
   - The outputs are in `sample/`. 12 of the 24 sample URLs no longer exist on the internet (HTTP 404 or unknown
@@ -104,9 +106,7 @@ then stops taking jobs, answers "rejected" to jobs that were waiting, finishes t
 Workers, deletes its queues, and terminates itself. Managers with no work also shut down by themselves: Workers
 after 5 idle minutes, the Manager after 10.
 
-**System limitations.** At most 19 instances; AWS Academy credentials expire with each lab session; `t3.micro` has
-1 GB of memory; OCR quality is weak on tiny or stylized images. Jobs share one task queue per Manager, so a big job
-sent first can delay a small job behind it.
+**System limitations.** At most 19 instances. `t3.micro` has 1 GB of memory. Jobs share one task queue per Manager, so a big job sent first can delay a small job behind it. The fix would be for the Manager to feed the queue fairly, sending only a few tasks at a time and taking turns between jobs. That means more state in the Manager and makes a lone big job a bit slower, so we left it out.
 
 **Are all Workers working hard?** Yes. A Worker takes one task at a time, so a free Worker always gets the next
 image and no Worker holds work that others could do. The Manager starts only the Workers a job needs, and stops
@@ -115,7 +115,7 @@ idle ones.
 **Is the Manager doing more than it should?** No. It only coordinates: it reads jobs, sends tasks, counts results,
 and writes summaries. It never downloads images or runs OCR, and Workers never make decisions.
 
-**Is it really distributed?** Yes. No part waits on another part directly; they only exchange messages and files.
+**Is it really distributed?** Yes. No part waits on another part directly, they only exchange messages and files.
 Any part can stop, restart or be replaced without the others noticing.
 
 
