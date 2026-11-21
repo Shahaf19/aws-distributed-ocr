@@ -87,6 +87,10 @@ public final class JobState {
         return received == results.length;
     }
 
+    public synchronized boolean hasUnfinishedImages() {
+        return results != null && received < results.length;
+    }
+
     public synchronized boolean isComplete() {
         return results != null && received == results.length;
     }

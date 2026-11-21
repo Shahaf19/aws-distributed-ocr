@@ -243,6 +243,7 @@ public final class Manager {
 
     /** Runs on the scheduler: other Managers learn about a terminate through their tag; idle Managers shut down. */
     private void checkLifecycle() {
+        recoverWorkerIfNeeded();
         if (shuttingDown.get()) {
             return;
         }
@@ -255,6 +256,18 @@ public final class Manager {
             }
         } catch (RuntimeException e) {
             System.err.println("Lifecycle check failed (will retry): " + e);
+        }
+    }
+
+    private void recoverWorkerIfNeeded() {
+        synchronized (scaler) {
+            if (jobs.snapshot().stream().anyMatch(JobState::hasUnfinishedImages)) {
+                try {
+                    scaler.ensureWorkers(1);
+                } catch (RuntimeException e) {
+                    System.err.println("Worker recovery check failed (will retry): " + e);
+                }
+            }
         }
     }
 
@@ -304,7 +317,9 @@ public final class Manager {
             // a last pass over what is still waiting in the inbox
         }
 
-        fleet.terminateMyWorkers();
+        synchronized (scaler) {
+            fleet.terminateMyWorkers();
+        }
         stopThreads();
         queues.delete(own.tasks());
         queues.delete(own.results());
