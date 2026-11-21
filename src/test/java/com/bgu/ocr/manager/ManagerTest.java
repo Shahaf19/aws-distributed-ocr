@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
@@ -173,6 +174,44 @@ public class ManagerTest {
         startWorkerFor("m2");
 
         assertEquals(2, summaryOf(awaitDone(reply)).size());
+    }
+
+    @Test(timeout = 5000)
+    public void replacesLastWorkerWhileDrainingAnAcceptedJob() throws Exception {
+        AtomicBoolean workerRunning = new AtomicBoolean();
+        CountDownLatch originalWorker = new CountDownLatch(1);
+        CountDownLatch replacementWorker = new CountDownLatch(1);
+        WorkerScaler scaler = needed -> {
+            if (workerRunning.compareAndSet(false, true)) {
+                if (originalWorker.getCount() == 0) {
+                    replacementWorker.countDown();
+                } else {
+                    originalWorker.countDown();
+                }
+            }
+        };
+        Manager manager = new Manager(queues, store, scaler, fleet.forManager("m1"), "m1", 2, ALERT, () -> { });
+        manager.start();
+        managers.add(manager);
+
+        InMemoryQueue reply = submit("job-1", "http://a.png");
+        InMemoryQueue tasks = queues.create(Manager.taskQueueName("m1"));
+        assertTrue("original Worker requested", originalWorker.await(1, TimeUnit.SECONDS));
+        while (tasks.receive(1).isEmpty()) {
+            Thread.sleep(5);
+        }
+
+        inbox.send(Json.toJson(new Terminate()));
+        while (!fleet.events().contains("m1 marked all Managers terminating")) {
+            Thread.sleep(5);
+        }
+        workerRunning.set(false);
+        tasks.expireInFlight();
+
+        assertTrue("replacement Worker requested", replacementWorker.await(1, TimeUnit.SECONDS));
+        startWorkerFor("m1");
+        assertEquals(1, summaryOf(awaitDone(reply)).size());
+        assertTrue(manager.awaitShutdown(2, TimeUnit.SECONDS));
     }
 
     @Test(timeout = 5000)

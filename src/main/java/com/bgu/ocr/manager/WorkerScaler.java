@@ -7,6 +7,6 @@ package com.bgu.ocr.manager;
 @FunctionalInterface
 public interface WorkerScaler {
 
-    /** @param needed m = ⌈K / worker-files-n⌉ for the job that just started */
+    /** @param needed minimum number of Workers to have booting or running */
     void ensureWorkers(int needed);
 }
